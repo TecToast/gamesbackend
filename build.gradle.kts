@@ -1,7 +1,10 @@
 val kotlin_version: String by project
 val logback_version: String by project
 val mongo_version: String by project
-
+val exposed_version: String by project
+val hikari_version: String by project
+val mariadb_version: String by project
+val jda_version: String by project
 plugins {
     kotlin("jvm") version "2.0.0"
     id("io.ktor.plugin") version "2.3.12"
@@ -39,7 +42,8 @@ val ktorDependencies = listOf(
     "ktor-serialization-kotlinx-json",
     "ktor-server-cors",
     "ktor-server-call-logging",
-    "ktor-server-call-logging-jvm"
+    "ktor-server-call-logging-jvm",
+    "ktor-server-websockets-jvm"
 
 )
 
@@ -50,7 +54,7 @@ dependencies {
 //    implementation("org.mongodb:mongodb-driver-core:$mongo_version")
 //    implementation("org.mongodb:mongodb-driver-sync:$mongo_version")
 //    implementation("org.mongodb:bson:$mongo_version")
-    implementation("net.dv8tion:JDA:5.0.1")
+    implementation("net.dv8tion:JDA:$jda_version")
     implementation("club.minnced:jda-ktx:0.12.0")
     implementation("org.slf4j:slf4j-api:2.0.13")
     implementation("ch.qos.logback:logback-classic:1.5.6")
@@ -62,6 +66,7 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
-    implementation("org.mariadb.jdbc:mariadb-java-client:3.4.0")
+    implementation("org.mariadb.jdbc:mariadb-java-client:$mariadb_version")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+    implementation("com.zaxxer:HikariCP:$hikari_version")
 }

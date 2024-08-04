@@ -36,7 +36,7 @@ fun Route.jeopardy() {
             JeopardyDataFrontend(data.categories,
                 data.jokers,
                 dataCache.getAll(data.participants).onEach { (_, u) -> u.jokers = data.jokers },
-                data.user)
+                data.user.toString())
         )
     }
     get("/my") {
@@ -122,7 +122,7 @@ data class JeopardyDataFrontend(
     val categories: Map<String, Map<String, JeopardyQuestion>>,
     val jokers: List<String>,
     val participants: Map<Long, JeopardyUser>,
-    val host: Long
+    val host: String
 )
 
 @Serializable

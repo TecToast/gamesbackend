@@ -29,6 +29,7 @@ private var delegateJda: JDA? = null
 
 fun initJDA(config: Config) {
     delegateJda = default(config.discordBotToken, intent = GatewayIntent.GUILD_MEMBERS)
+    if(config.devMode) return
     jda.listener<ReadyEvent> {
         jda.getGuildById(1036657324909146153)!!.upsertCommand(
             Commands.slash("jeopardy", "Jeopardy Controls").addSubcommands(

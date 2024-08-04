@@ -9,6 +9,8 @@ plugins {
     kotlin("jvm") version "2.0.0"
     id("io.ktor.plugin") version "2.3.12"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.0"
+    // shadow
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "de.tectoast"
@@ -19,6 +21,12 @@ application {
 
     val isDevelopment: Boolean = project.ext.has("development")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")
+}
+
+tasks.withType<Jar> {
+    manifest {
+        attributes["Main-Class"] = "de.tectoast.games.ApplicationKt"
+    }
 }
 
 repositories {

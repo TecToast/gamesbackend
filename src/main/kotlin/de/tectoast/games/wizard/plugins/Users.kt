@@ -26,7 +26,7 @@ class UserService(private val database: Database) {
         newSuspendedTransaction(Dispatchers.IO) { block() }
 
     suspend fun byLogin(login: Login) = dbQuery {
-        val result = Users.select { Users.username eq login.username }.firstOrNull() ?: return@dbQuery null
+        val result = Users.selectAll().where { Users.username eq login.username }.firstOrNull() ?: return@dbQuery null
         val hash = Hasher.hashPassword(login.username + login.password)
         if (result[Users.password] == null) Users.update({ Users.username eq login.username }) {
             it[password] = hash
@@ -44,7 +44,7 @@ class UserService(private val database: Database) {
     }
 
     suspend fun byToken(token: String) = dbQuery {
-        val result = Users.select { Users.token eq token }.firstOrNull() ?: return@dbQuery null
+        val result = Users.selectAll().where { Users.token eq token }.firstOrNull() ?: return@dbQuery null
         return@dbQuery result[Users.username]
     }
 

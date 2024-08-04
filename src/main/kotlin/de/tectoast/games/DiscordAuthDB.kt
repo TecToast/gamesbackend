@@ -14,13 +14,13 @@ object DiscordAuthDB : Table("discordauth"), SessionStorage {
     override val primaryKey = PrimaryKey(ID)
 
     override suspend fun read(id: String): String {
-        return newSuspendedTransaction {
+        return newSuspendedTransaction(db = discordAuthDB) {
             selectAll().where { ID eq id }.firstOrNull()?.get(VALUE) ?: throw NoSuchElementException()
         }
     }
 
     override suspend fun write(id: String, value: String) {
-        newSuspendedTransaction {
+        newSuspendedTransaction(db = discordAuthDB) {
             insertIgnore {
                 it[this.ID] = id
                 it[this.VALUE] = value
@@ -29,7 +29,7 @@ object DiscordAuthDB : Table("discordauth"), SessionStorage {
     }
 
     override suspend fun invalidate(id: String) {
-        newSuspendedTransaction {
+        newSuspendedTransaction(db = discordAuthDB) {
             deleteWhere { this.ID eq id }
         }
     }

@@ -5,16 +5,14 @@ import com.zaxxer.hikari.HikariDataSource
 import de.tectoast.games.discord.initJDA
 import de.tectoast.games.jeopardy.jeopardy
 import de.tectoast.games.wizard.WizardSession
+import de.tectoast.games.wizard.initWizard
 import de.tectoast.games.wizard.wizard
 import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
-import io.ktor.client.*
-import io.ktor.client.engine.cio.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
-import io.ktor.server.cio.*
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.*
 import io.ktor.server.plugins.callloging.*
@@ -34,12 +32,16 @@ import kotlin.system.exitProcess
 
 lateinit var config: Config
 
+lateinit var discordAuthDB: Database
+lateinit var wizardDB: Database
+
 fun main() {
     config = loadConfig("config.json") { Config() }
     initDirectories()
     initJDA(config)
     initMongo()
-    Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
+    discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
+    initWizard()
     embeddedServer(CIO, port = 9934, host = "0.0.0.0", module = { module(config) })
         .start(wait = true)
 }
@@ -137,6 +139,7 @@ private fun Application.installPlugins() {
         cookie<UserSession>("user_session", DiscordAuthDB) {
             cookie.extensions["SameSite"] = "None"
             cookie.httpOnly = true
+            cookie.secure = !config.devMode
         }
         cookie<WizardSession>("wiz") {
             cookie.extensions["SameSite"] = "lax"

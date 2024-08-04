@@ -7,6 +7,7 @@ import de.tectoast.games.wizard.model.Login
 import de.tectoast.games.wizard.model.WSMessage
 import de.tectoast.games.wizard.model.WSMessage.*
 import de.tectoast.games.wizard.plugins.UserService
+import de.tectoast.games.wizardDB
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
@@ -21,12 +22,16 @@ import org.jetbrains.exposed.sql.Database
 
 data class WizardSession(val token: String)
 
-val database = Database.connect(HikariDataSource(HikariConfig().apply {
-    jdbcUrl =
-        "jdbc:mariadb://localhost/wizard?user=wizard&password=wizard&minPoolSize=1&rewriteBatchedStatements=true"
-}))
 val logger = KotlinLogging.logger {}
-val userService = UserService(database)
+lateinit var userService: UserService
+
+fun initWizard() {
+    wizardDB = Database.connect(HikariDataSource(HikariConfig().apply {
+        jdbcUrl =
+            "jdbc:mariadb://localhost/wizard?user=wizard&password=wizard&minPoolSize=1&rewriteBatchedStatements=true"
+    }))
+    userService = UserService(wizardDB)
+}
 
 fun Route.wizard() {
     singlePageApplication {

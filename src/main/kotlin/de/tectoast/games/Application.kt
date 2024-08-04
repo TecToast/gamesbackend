@@ -42,7 +42,7 @@ fun main() {
     initMongo()
     discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
     initWizard()
-    embeddedServer(CIO, port = 9934, host = "0.0.0.0", module = { module(config) })
+    embeddedServer(CIO, port = 9934, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }
 
@@ -67,7 +67,7 @@ private inline fun <reified T> loadConfig(filename: String, default: () -> T): T
     return configJson.decodeFromString(file.readText())
 }
 
-fun Application.module(config: Config) {
+fun Application.module() {
     installPlugins()
     installAuth(config)
     routing {
@@ -115,6 +115,12 @@ fun Application.module(config: Config) {
                     return@get
                 }
                 call.respond(listOf(GameMeta("Jeopardy", "/jeopardy")))
+            }
+            get("/reloadconfig") {
+                val session = call.sessionOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
+                if(session.userId != 175910318608744448) return@get call.respond(HttpStatusCode.NotFound)
+                config = loadConfig("config.json") { Config() }
+                call.respond(HttpStatusCode.OK, "Done!")
             }
         }
         route("/wizard") {

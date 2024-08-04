@@ -81,6 +81,10 @@ fun Application.module(config: Config) {
                     }
                     val accessToken = principal.accessToken
                     val user = httpClient.getUserData(accessToken)
+                    if(user.id !in config.whitelisted) {
+                        call.respondRedirect("/error/notwhitelisted")
+                        return@get
+                    }
                     call.sessions.set(
                         UserSession(
                             accessToken,
@@ -104,12 +108,23 @@ fun Application.module(config: Config) {
                 install(apiGuard)
                 jeopardy()
             }
+            get("/mygames") {
+                val session = call.sessionOrNull()
+                if (session == null) {
+                    call.respond(emptyList<GameMeta>())
+                    return@get
+                }
+                call.respond(listOf(GameMeta("Jeopardy", "/jeopardy")))
+            }
         }
         route("/wizard") {
             wizard()
         }
     }
 }
+
+@Serializable
+data class GameMeta(val displayName: String, val url: String)
 
 private fun Application.installAuth(config: Config) {
     authentication {
@@ -173,10 +188,10 @@ val apiGuard = createRouteScopedPlugin("AuthGuard") {
     }
 }
 
+fun ApplicationCall.sessionOrNull() = sessions.get<UserSession>()
+
 fun ApplicationCall.sessionOrUnauthorized(): UserSession? {
-    return sessions.get<UserSession>()?.let {
-        if(it.userId in config.whitelisted) it else null
-    } ?: run {
+    return sessionOrNull() ?: run {
         response.status(HttpStatusCode.Unauthorized)
         null
     }

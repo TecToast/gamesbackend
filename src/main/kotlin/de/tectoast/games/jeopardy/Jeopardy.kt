@@ -28,15 +28,19 @@ private val dataCache = ExpiringMap(1.days) { list ->
     }
 }
 lateinit var mediaBaseDir: File
+private val idRegex = Regex("[a-zA-Z0-9]+")
+private val fileNotAllowedRegex = Regex("[^.a-zA-Z0-9]")
 
 fun Route.jeopardy() {
     get("/data/{id}") {
         val data = call.findJeopardyData() ?: return@get
         call.respond(
-            JeopardyDataFrontend(data.categories,
+            JeopardyDataFrontend(
+                data.categories,
                 data.jokers,
                 dataCache.getAll(data.participants).onEach { (_, u) -> u.jokers = data.jokers },
-                data.user.toString())
+                data.user.toString()
+            )
         )
     }
     get("/my") {
@@ -62,8 +66,7 @@ fun Route.jeopardy() {
         val newData = call.receive<JeopardyDataFrontend>()
         call.respond(runCatching {
             db.jeopardy.updateOne(
-                and(JeopardyDataDB::user eq data.user, JeopardyDataDB::id eq data.id),
-                set(
+                and(JeopardyDataDB::user eq data.user, JeopardyDataDB::id eq data.id), set(
                     JeopardyDataDB::categories setTo newData.categories,
                     JeopardyDataDB::jokers setTo newData.jokers,
                     JeopardyDataDB::participants setTo newData.participants.keys.toList()
@@ -78,16 +81,19 @@ fun Route.jeopardy() {
     post("/upload") {
         val session = call.sessionOrUnauthorized() ?: return@post
         val data = call.receiveMultipart()
-        val path = (data.readPart() as? PartData.FormItem)?.let {
-            if (it.name != "path") return@let null
-            val raw = it.value
-            if ("." in raw || raw.startsWith("/")) return@let null
-            mediaBaseDir.resolve(session.userId.toString()).resolve(raw)
-        } ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val id = data.readString("id") ?: return@post call.badReq()
+        val category = data.readString("category") ?: return@post call.badReq()
+        val points = data.readString("points") ?: return@post call.badReq()
+        val type = data.readString("type")?.takeIf { it == "Question" || it == "Answer" } ?: return@post call.badReq()
+        setOf(id, category, points).forEach {
+            idRegex.matchEntire(it) ?: return@post call.badReq()
+        }
+        val path =
+            mediaBaseDir.resolve(session.userId.toString()).resolve(id).resolve(category).resolve(points).resolve(type)
         path.mkdirs()
-        val fileData = (data.readPart() as? PartData.FileItem) ?: return@post call.respond(HttpStatusCode.BadRequest)
+        val fileData = (data.readPart() as? PartData.FileItem) ?: return@post call.badReq()
         val file = fileData.streamProvider().readBytes()
-        val resolve = path.resolve(fileData.originalFileName ?: "file")
+        val resolve = path.resolve(fileData.originalFileName?.replace(fileNotAllowedRegex, "") ?: "file")
         resolve.writeBytes(file)
         call.respond(HttpStatusCode.OK, resolve.name)
     }
@@ -95,6 +101,13 @@ fun Route.jeopardy() {
 
 }
 
+private suspend fun MultiPartData.readString(name: String): String? {
+    val part = readPart() as? PartData.FormItem ?: return null
+    if (part.name != name) return null
+    return part.value.encodeURLPathPart()
+}
+
+suspend fun ApplicationCall.badReq() = respond(HttpStatusCode.BadRequest)
 private suspend fun ApplicationCall.findJeopardyData(): JeopardyDataDB? {
     val session = sessionOrUnauthorized() ?: return null
     val data = db.jeopardy.findOne(

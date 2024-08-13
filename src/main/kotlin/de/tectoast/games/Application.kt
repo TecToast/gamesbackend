@@ -173,7 +173,6 @@ private fun Application.installPlugins() {
         level = Level.INFO
     }
     install(WebSockets) {
-        pingPeriod = Duration.ofSeconds(15)
         timeout = Duration.ofSeconds(15)
         maxFrameSize = Long.MAX_VALUE
         masking = false

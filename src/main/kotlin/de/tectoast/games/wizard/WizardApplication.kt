@@ -38,7 +38,6 @@ fun Route.wizard() {
         val fileRoot =
             if (developmentMode) "/home/florian/Desktop/IntelliJ/Web/wizard/wizardfront/dist/wizard"
             else "/home/florian/gamesnew/wizard/web"
-        logger.info { "FileRoot: $fileRoot" }
         angular(fileRoot)
     }
     post("/login") {

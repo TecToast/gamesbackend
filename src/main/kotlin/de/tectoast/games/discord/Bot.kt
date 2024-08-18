@@ -57,7 +57,7 @@ fun initJDA(config: Config) {
         when (split[0]) {
             "jeopardy:users" -> {
                 val quizName = split[1]
-                val users = it.interaction.mentions.users.map { v -> v.idLong }
+                val users = it.interaction.mentions.users.map { v -> v.id }
                 db.jeopardy.updateOne(JeopardyDataDB::id eq quizName, set(JeopardyDataDB::participants setTo users))
                 it.reply_("Users set! Refresh the website!", ephemeral = true).queue()
             }

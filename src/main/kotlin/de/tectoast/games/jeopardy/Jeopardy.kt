@@ -21,7 +21,7 @@ import java.io.File
 import kotlin.time.Duration.Companion.days
 
 private val dataCache = ExpiringMap(1.days) { list ->
-    jda.getGuildById(1036657324909146153)!!.findMembers { mem -> mem.idLong in list }.await().map {
+    jda.getGuildById(1036657324909146153)!!.findMembers { mem -> mem.id in list }.await().sortedBy { list.indexOf(it.id) }.map {
         JeopardyUser(
             it.user.effectiveAvatarUrl.substringBeforeLast(".") + ".png?size=512", it.user.effectiveName, null, 0
         )
@@ -39,6 +39,7 @@ fun Route.jeopardy() {
                 data.categories,
                 data.jokers,
                 dataCache.getAll(data.participants).onEach { (_, u) -> u.jokers = data.jokers },
+                data.participants,
                 data.user.toString()
             )
         )
@@ -127,14 +128,15 @@ data class JeopardyDataDB(
     val id: String,
     val categories: Map<String, Map<String, JeopardyQuestion>>,
     val jokers: List<String>,
-    val participants: List<Long>,
+    val participants: List<String>,
 )
 
 @Serializable
 data class JeopardyDataFrontend(
     val categories: Map<String, Map<String, JeopardyQuestion>>,
     val jokers: List<String>,
-    val participants: Map<Long, JeopardyUser>,
+    val participants: Map<String, JeopardyUser>,
+    val participantList: List<String>,
     val host: String
 )
 

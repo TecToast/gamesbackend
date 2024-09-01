@@ -1,15 +1,38 @@
 package de.tectoast.games
 
+import com.mongodb.client.model.Filters
+import de.tectoast.games.db.BackendBase
+import de.tectoast.games.db.FrontEndBase
+import de.tectoast.games.db.JeopardyDataDB
+import de.tectoast.games.utils.ExpiringMap
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.MultiPartData
+import io.ktor.http.content.PartData
+import io.ktor.http.encodeURLPathPart
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.call
+import io.ktor.server.request.receive
+import io.ktor.server.request.receiveText
+import io.ktor.server.response.respond
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import mu.KotlinLogging
 import net.dv8tion.jda.api.entities.User
+import org.litote.kmongo.and
+import org.litote.kmongo.coroutine.CoroutineCollection
+import org.litote.kmongo.set
+import org.litote.kmongo.setTo
+import kotlin.reflect.KProperty1
+
 private val logger = KotlinLogging.logger {}
 val httpClient = HttpClient(CIO) {
     install(ContentNegotiation) {
@@ -51,4 +74,79 @@ data class DiscordUser(
         }"
     } ?: String.format(User.DEFAULT_AVATAR_URL, ((id shr 22) % 6).toString())
     )
+}
+
+suspend fun MultiPartData.readString(name: String): String? {
+    val part = readPart() as? PartData.FormItem ?: return null
+    if (part.name != name) return null
+    return part.value.encodeURLPathPart()
+}
+
+suspend fun ApplicationCall.badReq() = respond(HttpStatusCode.BadRequest)
+
+
+suspend fun <T : Any> ApplicationCall.findQuizData(coll: CoroutineCollection<T>): T? {
+    val session = sessionOrUnauthorized() ?: return null
+    val data = coll.findOne(
+        and(Filters.eq("user", session.userId), Filters.eq("id", parameters["id"]!!))
+    ) ?: run {
+        respond(HttpStatusCode.NotFound, "No data for session and user found")
+        return null
+    }
+    return data
+}
+
+suspend fun <T : BackendBase> ApplicationCall.findMyQuizzes(coll: CoroutineCollection<T>): List<String> {
+    val session = sessionOrUnauthorized() ?: return emptyList()
+    return coll.find(Filters.eq("user", session.userId)).toList().map { it.id }
+}
+
+inline fun <B : BackendBase, reified F : FrontEndBase<U>, U> Route.createDefaultRoutes(
+    coll: CoroutineCollection<B>,
+    dataCache: ExpiringMap<String, U>,
+    updateMap: Map<KProperty1<B, *>, KProperty1<F, *>>,
+    crossinline onEachUser: B.(U) -> Unit = {},
+    crossinline frontEndMapper: (B) -> F,
+    crossinline backendSupplier: () -> B
+) {
+    get("/data/{id}") {
+        val data = call.findQuizData(coll) ?: return@get
+        call.respond(frontEndMapper(data).apply<F> { store(dataCache, data.participants) { u -> data.onEachUser(u) } })
+    }
+    get("/my") {
+        call.respond(call.findMyQuizzes(coll))
+    }
+    post("/create") {
+        val session = call.sessionOrUnauthorized() ?: return@post
+        val data = call.receiveText()
+        call.respond(runCatching {
+            coll.insertOne(
+                backendSupplier().apply {
+                    user = session.userId
+                    id = data
+                }
+            )
+        }.fold(onSuccess = { HttpStatusCode.Created }, onFailure = { HttpStatusCode.BadRequest })
+        )
+    }
+
+
+    post("/update/{id}") {
+        val data = call.findQuizData(coll) ?: return@post
+        val newData = call.receive<F>()
+        call.respond(runCatching {
+            db.jeopardy.updateOne(
+                and(Filters.eq("user", data.user), Filters.eq("id", data.id)), set(
+                    *updateMap.map { (backend, frontend) ->
+                        backend setTo frontend.get(newData)
+                    }.toTypedArray(),
+                    JeopardyDataDB::participants setTo newData.participants.keys.toList()
+                )
+            )
+        }.fold(onSuccess = { HttpStatusCode.OK }, onFailure = {
+            it.printStackTrace()
+            HttpStatusCode.BadRequest
+        })
+        )
+    }
 }

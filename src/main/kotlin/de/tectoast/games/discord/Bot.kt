@@ -1,10 +1,14 @@
 package de.tectoast.games.discord
 
+import com.mongodb.client.model.Filters
+import com.mongodb.client.model.Updates
 import de.tectoast.games.Config
 import de.tectoast.games.db
-import de.tectoast.games.jeopardy.JeopardyDataDB
+import de.tectoast.games.utils.GUILD_ID
 import dev.minn.jda.ktx.events.listener
-import dev.minn.jda.ktx.interactions.commands.Subcommand
+import dev.minn.jda.ktx.interactions.commands.Command
+import dev.minn.jda.ktx.interactions.commands.choice
+import dev.minn.jda.ktx.interactions.commands.option
 import dev.minn.jda.ktx.interactions.components.EntitySelectMenu
 import dev.minn.jda.ktx.interactions.components.into
 import dev.minn.jda.ktx.jdabuilder.default
@@ -15,37 +19,41 @@ import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInterac
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
 import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent
 import net.dv8tion.jda.api.events.session.ReadyEvent
-import net.dv8tion.jda.api.interactions.commands.OptionType
-import net.dv8tion.jda.api.interactions.commands.build.Commands
 import net.dv8tion.jda.api.interactions.components.selections.EntitySelectMenu.SelectTarget
 import net.dv8tion.jda.api.requests.GatewayIntent
-import org.litote.kmongo.eq
-import org.litote.kmongo.set
-import org.litote.kmongo.setTo
 
 val jda by lazy { delegateJda ?: error("JDA not initialized!") }
 
 private var delegateJda: JDA? = null
 
 fun initJDA(config: Config) {
-    delegateJda = default(config.discordBotToken, intent = GatewayIntent.GUILD_MEMBERS)
-    if(config.devMode) return
+    delegateJda = default(
+        config.discordBotToken,
+        intents = listOf(GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.GUILD_MEMBERS)
+    )
+    if (config.devMode) return
     jda.listener<ReadyEvent> {
-        jda.getGuildById(1036657324909146153)!!.upsertCommand(
-            Commands.slash("jeopardy", "Jeopardy Controls").addSubcommands(
-                Subcommand("setusers", "Set the users for a quiz") {
-                    addOption(OptionType.STRING, "name", "The name of your jeopardy quiz", true, true)
-                },
-            )
+        val guild = jda.getGuildById(GUILD_ID)!!
+        guild.upsertCommand(
+            Command("setusers", "Set users for a quiz") {
+                option<String>("quiz", "The type of quiz you want to set the users for", required = true) {
+                    choice("Jeopardy", "jeopardy")
+                    choice("Music Quiz", "musicquiz")
+                }
+                option<String>("name", "The name of the quiz", required = true, autocomplete = true)
+            }
         ).queue()
     }
     jda.listener<CommandAutoCompleteInteractionEvent> {
         val str = it.focusedOption.value
         when (it.name) {
-            "jeopardy" -> {
+            "setusers" -> {
                 when (it.focusedOption.name) {
                     "name" -> {
-                        val quizzes = db.jeopardy.find(JeopardyDataDB::user eq it.user.idLong).toList()
+                        val quiz = it.getOption("quiz")?.asString
+                            ?: return@listener it.replyChoiceStrings("You have to provide a quiz.").queue()
+                        val database = quiz.parseDatabase { s -> it.replyChoiceStrings(s).queue() } ?: return@listener
+                        val quizzes = database.find(Filters.eq("user", it.user.idLong)).toList()
                         it.replyChoiceStrings(quizzes.map { q -> q.id }.filter { q -> q.startsWith(str) }).queue()
                     }
                 }
@@ -55,37 +63,45 @@ fun initJDA(config: Config) {
     jda.listener<EntitySelectInteractionEvent> {
         val split = it.componentId.split(";")
         when (split[0]) {
-            "jeopardy:users" -> {
-                val quizName = split[1]
+            "users" -> {
+                val quiz = split[1]
+                val quizName = split[2]
                 val users = it.interaction.mentions.users.map { v -> v.id }
-                db.jeopardy.updateOne(JeopardyDataDB::id eq quizName, set(JeopardyDataDB::participants setTo users))
+                val database = quiz.parseDatabase { s -> it.reply_(s, ephemeral = true).queue() } ?: return@listener
+                database.updateOne(Filters.eq("id", quizName), Updates.set("participants", users))
                 it.reply_("Users set! Refresh the website!", ephemeral = true).queue()
             }
         }
     }
     jda.listener<SlashCommandInteractionEvent> {
         when (it.name) {
-            "jeopardy" -> {
-                when (it.subcommandName) {
-                    "setusers" -> {
-                        val quizName = it.getOption("name")!!.asString
-                        db.jeopardy.findOne(JeopardyDataDB::user eq it.user.idLong, JeopardyDataDB::id eq quizName)
-                            ?: run {
-                                it.reply_("Quiz not found!", ephemeral = true).queue()
-                                return@listener
-                            }
-                        it.reply_(
-                            "Choose the users for this quiz!",
-                            components = EntitySelectMenu(
-                                "jeopardy:users;${quizName}",
-                                types = SelectTarget.USER.into(),
-                                valueRange = 1..25
-                            ).into(),
-                            ephemeral = true
-                        ).queue()
+            "setusers" -> {
+                val quiz = it.getOption("quiz")!!.asString
+                val quizName = it.getOption("name")!!.asString
+                val database = quiz.parseDatabase { s -> it.reply_(s, ephemeral = true).queue() } ?: return@listener
+                database.findOne(Filters.eq("user", it.user.idLong), Filters.eq("id", quizName))
+                    ?: run {
+                        it.reply_("Quiz not found!", ephemeral = true).queue()
+                        return@listener
                     }
-                }
+                it.reply_(
+                    "Choose the users for this quiz!",
+                    components = EntitySelectMenu(
+                        "users;$quiz;${quizName}",
+                        types = SelectTarget.USER.into(),
+                        valueRange = 1..25
+                    ).into(),
+                    ephemeral = true
+                ).queue()
             }
+
         }
     }
+
+}
+
+inline fun String.parseDatabase(answer: (String) -> Unit) = when (this) {
+    "jeopardy" -> db.jeopardy
+    "musicquiz" -> db.musicquiz
+    else -> null.also { answer("Invalid quiz type.") }
 }

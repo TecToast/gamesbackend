@@ -1,6 +1,7 @@
 package de.tectoast.games
 
-import de.tectoast.games.jeopardy.JeopardyDataDB
+import de.tectoast.games.db.JeopardyDataDB
+import de.tectoast.games.db.MusicQuizDataDB
 import org.litote.kmongo.coroutine.coroutine
 import org.litote.kmongo.reactivestreams.KMongo
 import org.litote.kmongo.serialization.configuration
@@ -23,4 +24,5 @@ class MongoGames(dbUrl: String, dbName: String) {
     }
 
     val jeopardy by lazy { db.getCollection<JeopardyDataDB>("jeopardy") }
+    val musicquiz by lazy { db.getCollection<MusicQuizDataDB>("musicquiz") }
 }

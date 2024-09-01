@@ -4,10 +4,10 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import de.tectoast.games.discord.initJDA
 import de.tectoast.games.jeopardy.jeopardy
+import de.tectoast.games.musicquiz.musicQuiz
 import de.tectoast.games.wizard.WizardSession
 import de.tectoast.games.wizard.initWizard
 import de.tectoast.games.wizard.wizard
-import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
@@ -29,6 +29,7 @@ import org.slf4j.event.Level
 import java.io.File
 import java.time.Duration
 import kotlin.system.exitProcess
+import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
 
 lateinit var config: Config
 
@@ -108,13 +109,17 @@ fun Application.module() {
                 install(apiGuard)
                 jeopardy()
             }
+            route("/musicquiz") {
+                install(apiGuard)
+                musicQuiz()
+            }
             get("/mygames") {
                 val session = call.sessionOrNull()
                 if (session == null) {
                     call.respond(emptyList<GameMeta>())
                     return@get
                 }
-                call.respond(listOf(GameMeta("Jeopardy", "/jeopardy")))
+                call.respond(listOf(GameMeta("Jeopardy", "/jeopardy/config"), GameMeta("MusicQuiz", "/musicquiz/config")))
             }
             get("/reloadconfig") {
                 val session = call.sessionOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
@@ -213,3 +218,4 @@ data class Config(
     val mysqlUrl: String = "secret",
     val whitelisted: Set<Long> = emptySet()
 )
+

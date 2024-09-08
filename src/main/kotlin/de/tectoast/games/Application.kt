@@ -179,6 +179,7 @@ private fun Application.installPlugins() {
     }
     install(WebSockets) {
         timeout = Duration.ofSeconds(15)
+        pingPeriod =  Duration.ofSeconds(30)
         maxFrameSize = Long.MAX_VALUE
         masking = false
         contentConverter = KotlinxWebsocketSerializationConverter(Json)

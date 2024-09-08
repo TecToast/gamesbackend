@@ -163,8 +163,8 @@ fun Route.musicQuiz() {
                 )
                     .queue()
                 e.replyModal(Modal("guess", "Guess") {
-                    short("track", "Track", required = true)
                     short("game", "Game", required = true)
+                    short("track", "Track", required = true)
                 }).queue()
             }
         }

@@ -9,6 +9,7 @@ import de.tectoast.games.wizard.model.WSMessage.*
 import de.tectoast.games.wizard.plugins.UserService
 import de.tectoast.games.wizardDB
 import io.ktor.http.*
+import io.ktor.serialization.deserialize
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
 import io.ktor.server.request.*
@@ -16,7 +17,6 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sessions.*
 import io.ktor.server.websocket.*
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import mu.KotlinLogging
 import org.jetbrains.exposed.sql.Database
 
@@ -73,13 +73,8 @@ fun Route.wizard() {
             SocketManager.register(username, this)
             sendWS(WSLoginResponse(username))
             GameManager.updateOpenGames(this)
-            while (true) {
-                val msg = runCatching { receiveDeserialized<WSMessage>() }.onFailure {
-                    logger.error(it) { "Error on deserialize:" }
-                    if (it is ClosedReceiveChannelException) {
-                        return@webSocket
-                    }
-                }.getOrNull()
+            for(frame in incoming) {
+                val msg = converter?.deserialize<WSMessage>(frame)
                 when (msg) {
                     null -> {}
                     is CreateGame -> {

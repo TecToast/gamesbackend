@@ -5,8 +5,9 @@ import com.zaxxer.hikari.HikariDataSource
 import de.tectoast.games.discord.initJDA
 import de.tectoast.games.jeopardy.jeopardy
 import de.tectoast.games.musicquiz.musicQuiz
+import de.tectoast.games.utils.OAuthExpiringMap
+import de.tectoast.games.utils.OAuthSession
 import de.tectoast.games.wizard.WizardSession
-import de.tectoast.games.wizard.initWizard
 import de.tectoast.games.wizard.wizard
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.*
@@ -29,12 +30,23 @@ import org.slf4j.event.Level
 import java.io.File
 import java.time.Duration
 import kotlin.system.exitProcess
+import kotlin.time.Duration.Companion.days
 import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
 
 lateinit var config: Config
 
 lateinit var discordAuthDB: Database
-lateinit var wizardDB: Database
+
+val nameCache by lazy {
+    OAuthExpiringMap<UserSession, String>(
+        1.days,
+        clientId = "723829878755164202",
+        clientSecret = config.oauth2Secret,
+        sessionUpdater = { session, accessToken, expires -> session.copy(accessToken = accessToken, expires = expires) },
+    ) { accessToken ->
+        httpClient.getUserData(accessToken).displayName
+    }
+}
 
 fun main() {
     config = loadConfig("config.json") { Config() }
@@ -42,7 +54,6 @@ fun main() {
     initJDA(config)
     initMongo()
     discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
-    initWizard()
     embeddedServer(CIO, port = 9934, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }
@@ -82,7 +93,7 @@ fun Application.module() {
                     }
                     val accessToken = principal.accessToken
                     val user = httpClient.getUserData(accessToken)
-                    if(user.id !in config.whitelisted) {
+                    if (user.id !in config.permissions) {
                         call.respondRedirect("/error/notwhitelisted")
                         return@get
                     }
@@ -119,23 +130,37 @@ fun Application.module() {
                     call.respond(emptyList<GameMeta>())
                     return@get
                 }
-                call.respond(listOf(GameMeta("Jeopardy", "/jeopardy/config"), GameMeta("MusicQuiz", "/musicquiz/config")))
+                call.respond(
+                    AuthData(
+                        nameCache.get(call, session),
+                        config.permissions[session.userId]?.mapNotNull { allGames[it] } ?: emptyList()
+                    )
+                )
             }
             get("/reloadconfig") {
                 val session = call.sessionOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
-                if(session.userId != 175910318608744448) return@get call.respond(HttpStatusCode.NotFound)
+                if (session.userId != 175910318608744448) return@get call.respond(HttpStatusCode.NotFound)
                 config = loadConfig("config.json") { Config() }
                 call.respond(HttpStatusCode.OK, "Done!")
             }
-        }
-        route("/wizard") {
-            wizard()
+            route("/wizard") {
+                wizard()
+            }
         }
     }
 }
 
 @Serializable
 data class GameMeta(val displayName: String, val url: String)
+
+@Serializable
+data class AuthData(val name: String, val games: List<GameMeta>)
+
+val allGames = mapOf(
+    "jeopardy" to GameMeta("Jeopardy", "/jeopardy/config"),
+    "musicquiz" to GameMeta("MusicQuiz", "/musicquiz/config"),
+    "wizard" to GameMeta("Wizard", "/wizard")
+)
 
 private fun Application.installAuth(config: Config) {
     authentication {
@@ -179,7 +204,7 @@ private fun Application.installPlugins() {
     }
     install(WebSockets) {
         timeout = Duration.ofSeconds(15)
-        pingPeriod =  Duration.ofSeconds(30)
+        pingPeriod = Duration.ofSeconds(30)
         maxFrameSize = Long.MAX_VALUE
         masking = false
         contentConverter = KotlinxWebsocketSerializationConverter(Json)
@@ -209,7 +234,12 @@ fun ApplicationCall.sessionOrUnauthorized(): UserSession? {
 }
 
 @Serializable
-data class UserSession(val accessToken: String, val refreshToken: String, val expires: Long, val userId: Long)
+data class UserSession(
+    override val accessToken: String,
+    override val refreshToken: String,
+    override val expires: Long,
+    val userId: Long
+) : OAuthSession
 
 @Serializable
 data class Config(
@@ -217,6 +247,6 @@ data class Config(
     val devMode: Boolean = false,
     val discordBotToken: String = "secret",
     val mysqlUrl: String = "secret",
-    val whitelisted: Set<Long> = emptySet()
+    val permissions: Map<Long, Set<String>> = emptyMap(),
 )
 

@@ -1,63 +1,24 @@
 package de.tectoast.games.wizard
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
+import de.tectoast.games.UserSession
+import de.tectoast.games.nameCache
+import de.tectoast.games.sessionOrNull
 import de.tectoast.games.wizard.model.GameData
-import de.tectoast.games.wizard.model.Login
 import de.tectoast.games.wizard.model.WSMessage
 import de.tectoast.games.wizard.model.WSMessage.*
-import de.tectoast.games.wizard.plugins.UserService
-import de.tectoast.games.wizardDB
-import io.ktor.http.*
 import io.ktor.serialization.deserialize
-import io.ktor.server.application.*
-import io.ktor.server.http.content.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.sessions.*
 import io.ktor.server.websocket.*
 import mu.KotlinLogging
-import org.jetbrains.exposed.sql.Database
 
 data class WizardSession(val token: String)
 
 val logger = KotlinLogging.logger {}
-lateinit var userService: UserService
 
-fun initWizard() {
-    wizardDB = Database.connect(HikariDataSource(HikariConfig().apply {
-        jdbcUrl =
-            "jdbc:mariadb://localhost/wizard?user=wizard&password=wizard&minPoolSize=1&rewriteBatchedStatements=true"
-    }))
-    userService = UserService(wizardDB)
-}
+
 
 fun Route.wizard() {
-    singlePageApplication {
-        val fileRoot =
-            if (developmentMode) "/home/florian/Desktop/IntelliJ/Web/wizard/wizardfront/dist/wizard"
-            else "/home/florian/gamesnew/wizard/web"
-        angular(fileRoot)
-    }
-    post("/login") {
-        logger.info { "YEAH LOGIN" }
-        val user = call.receive<Login>()
-        val token =
-            userService.byLogin(user) ?: return@post call.respond(HttpStatusCode.Forbidden)
-        call.sessions.set(WizardSession(token))
-        call.respond(HttpStatusCode.NoContent)
-    }
 
-    post("/registerme") {
-        val user = call.receive<Login>()
-        logger.info { System.getenv("REGISTER_KEY") }
-        if (call.request.authorization() != System.getenv("REGISTER_KEY")) return@post call.respond(
-            HttpStatusCode.Forbidden
-        )
-        userService.register(user)
-        call.respond(HttpStatusCode.OK)
-    }
     webSocket("/ws") {
         try {
             suspend fun error() = sendWS(
@@ -66,7 +27,8 @@ fun Route.wizard() {
 
 //                val session = call.sessions.get<WizardSession>() ?: return@webSocket error()
 //                val username = userService.byToken(session.token) ?: return@webSocket error()
-            val username = usernameProvider.run { getUsername() } ?: return@webSocket error()
+            val session = call.sessionOrNull() ?: return@webSocket error()
+            val username = nameCache.get<UserSession>(call, session)
             logger.info { "Username: $username" }
 
             lateinit var game: Game
@@ -102,28 +64,6 @@ fun Route.wizard() {
             }
         } catch (e: Exception) {
             logger.error(e) { "Error in Websocket" }
-        }
-    }
-}
-
-val usernameProvider: UsernameProvider = UsernameProvider.Session
-
-sealed class UsernameProvider {
-    abstract suspend fun WebSocketServerSession.getUsername(): String?
-
-    data object Session : UsernameProvider() {
-        override suspend fun WebSocketServerSession.getUsername(): String? {
-            val callSession = call.sessions.get<WizardSession>()
-            logger.info { callSession }
-            val session = callSession ?: return null
-            return userService.byToken(session.token).also { logger.info { it } }
-        }
-    }
-
-    data object Dev : UsernameProvider() {
-        override suspend fun WebSocketServerSession.getUsername(): String? {
-            return runCatching { receiveDeserialized<String>() }.onFailure { logger.error(it) { "Receive Dev Token" } }
-                .getOrNull()
         }
     }
 }

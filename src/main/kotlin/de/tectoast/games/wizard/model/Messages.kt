@@ -128,9 +128,6 @@ sealed class WSMessage {
 }
 
 @Serializable
-data class Login(val username: String, val password: String)
-
-@Serializable
 data class GameData(val owner: String, val id: Int)
 
 @Serializable

@@ -25,10 +25,9 @@ fun Route.wizard() {
                 WSLoginResponse(null)
             )
 
-//                val session = call.sessions.get<WizardSession>() ?: return@webSocket error()
-//                val username = userService.byToken(session.token) ?: return@webSocket error()
             val session = call.sessionOrNull() ?: return@webSocket error()
             val username = nameCache.get<UserSession>(call, session)
+            // TODO: Split between display name for FrontEnd and Username/ID for backend (e.g. WS connections in SocketManager)
             logger.info { "Username: $username" }
 
             lateinit var game: Game

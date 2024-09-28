@@ -57,9 +57,10 @@ fun main() {
     config = loadConfig("config.json") { Config() }
     initDirectories()
     initJDA(config)
-    initMongo()
-    if(config.mysqlUrl != "secret")
-    discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
+    if(config.mysqlUrl != "secret") {
+        initMongo()
+        discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
+    }
     embeddedServer(CIO, port = 9934, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }

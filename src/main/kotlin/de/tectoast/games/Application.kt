@@ -57,7 +57,7 @@ fun main() {
     config = loadConfig("config.json") { Config() }
     initDirectories()
     initJDA(config)
-    if(config.mysqlUrl != "secret") {
+    if (config.mysqlUrl != "secret") {
         initMongo()
         discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
     }
@@ -123,13 +123,23 @@ fun Application.module() {
                 call.sessions.clear<UserSession>()
                 call.respondRedirect("https://games.tectoast.de/")
             }
-            route("/jeopardy") {
-                install(apiGuard)
-                jeopardy()
+            if (config.enabledGames.contains("jeopardy")) {
+                route("/jeopardy") {
+                    install(apiGuard)
+                    jeopardy()
+                }
             }
-            route("/musicquiz") {
-                install(apiGuard)
-                musicQuiz()
+            if (config.enabledGames.contains("musicquiz")) {
+                route("/musicquiz") {
+                    install(apiGuard)
+                    musicQuiz()
+                }
+            }
+            if(config.enabledGames.contains("wizard")) {
+                route("/wizard") {
+                    install(apiGuard)
+                    wizard()
+                }
             }
             get("/mygames") {
                 val session = call.sessionOrNull()
@@ -151,9 +161,7 @@ fun Application.module() {
                 config = loadConfig("config.json") { Config() }
                 call.respond(HttpStatusCode.OK, "Done!")
             }
-            route("/wizard") {
-                wizard()
-            }
+
         }
     }
 }
@@ -233,7 +241,12 @@ val apiGuard = createRouteScopedPlugin("AuthGuard") {
 }
 
 fun ApplicationCall.sessionOrNull() =
-    (if(config.mysqlUrl == "secret") null else sessions.get<UserSession>()) ?: if (config.devMode) UserSession("dev", "dev", 0, 0) else null
+    (if (config.mysqlUrl == "secret") null else sessions.get<UserSession>()) ?: if (config.devMode) UserSession(
+        "dev",
+        "dev",
+        0,
+        0
+    ) else null
 
 fun ApplicationCall.sessionOrUnauthorized(): UserSession? {
     return sessionOrNull() ?: run {
@@ -252,6 +265,7 @@ data class UserSession(
 
 @Serializable
 data class Config(
+    val enabledGames: Set<String> = setOf("jeopardy", "musicquiz", "wizard"),
     val oauth2Secret: String = "secret",
     val devMode: Boolean = false,
     val discordBotToken: String = "secret",

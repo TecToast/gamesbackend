@@ -148,10 +148,10 @@ fun Application.module() {
                     return@get
                 }
                 call.respond(
-                    if (session.userId == 0L) AuthData("TestUser", allGames.values.toList()) else
+                    if (session.userId == 0L) AuthData("TestUser", allGames.entries.mapNotNull { en -> en.value.takeIf { en.key in config.enabledGames } }) else
                         AuthData(
                             nameCache.get(call, session),
-                            config.permissions[session.userId]?.mapNotNull { allGames[it] } ?: emptyList()
+                            config.permissions[session.userId]?.mapNotNull { if(it in config.enabledGames) allGames[it] else null } ?: emptyList()
                         )
                 )
             }

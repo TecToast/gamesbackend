@@ -58,6 +58,7 @@ fun main() {
     initDirectories()
     initJDA(config)
     initMongo()
+    if(config.mysqlUrl != "secret")
     discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
     embeddedServer(CIO, port = 9934, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
@@ -231,7 +232,7 @@ val apiGuard = createRouteScopedPlugin("AuthGuard") {
 }
 
 fun ApplicationCall.sessionOrNull() =
-    sessions.get<UserSession>() ?: if (config.devMode) UserSession("dev", "dev", 0, 0) else null
+    (if(config.mysqlUrl == "secret") null else sessions.get<UserSession>()) ?: if (config.devMode) UserSession("dev", "dev", 0, 0) else null
 
 fun ApplicationCall.sessionOrUnauthorized(): UserSession? {
     return sessionOrNull() ?: run {

@@ -267,7 +267,7 @@ data class UserSession(
 data class Config(
     val enabledGames: Set<String> = setOf("jeopardy", "musicquiz", "wizard"),
     val oauth2Secret: String = "secret",
-    val devMode: Boolean = false,
+    val devMode: Boolean = true,
     val discordBotToken: String = "secret",
     val mysqlUrl: String = "secret",
     val permissions: Map<Long, Set<String>> = emptyMap(),

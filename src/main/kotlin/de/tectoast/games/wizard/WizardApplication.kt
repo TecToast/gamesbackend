@@ -1,6 +1,7 @@
 package de.tectoast.games.wizard
 
 import de.tectoast.games.UserSession
+import de.tectoast.games.config
 import de.tectoast.games.nameCache
 import de.tectoast.games.sessionOrNull
 import de.tectoast.games.wizard.model.GameData
@@ -16,7 +17,6 @@ data class WizardSession(val token: String)
 val logger = KotlinLogging.logger {}
 
 
-
 fun Route.wizard() {
 
     webSocket("/ws") {
@@ -26,7 +26,9 @@ fun Route.wizard() {
             )
 
             val session = call.sessionOrNull() ?: return@webSocket error()
-            val username = nameCache.get<UserSession>(call, session)
+
+            val username =
+                if (config.devMode && session.userId == 0L) "TestUser" else nameCache.get<UserSession>(call, session)
             // TODO: Split between display name for FrontEnd and Username/ID for backend (e.g. WS connections in SocketManager)
             logger.info { "Username: $username" }
 
@@ -34,7 +36,7 @@ fun Route.wizard() {
             SocketManager.register(username, this)
             sendWS(WSLoginResponse(username))
             GameManager.updateOpenGames(this)
-            for(frame in incoming) {
+            for (frame in incoming) {
                 val msg = converter?.deserialize<WSMessage>(frame)
                 when (msg) {
                     null -> {}

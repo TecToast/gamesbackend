@@ -42,7 +42,12 @@ val nameCache by lazy {
         1.days,
         clientId = "723829878755164202",
         clientSecret = config.oauth2Secret,
-        sessionUpdater = { session, accessToken, expires -> session.copy(accessToken = accessToken, expires = expires) },
+        sessionUpdater = { session, accessToken, expires ->
+            session.copy(
+                accessToken = accessToken,
+                expires = expires
+            )
+        },
     ) { accessToken ->
         httpClient.getUserData(accessToken).displayName
     }
@@ -131,10 +136,11 @@ fun Application.module() {
                     return@get
                 }
                 call.respond(
-                    AuthData(
-                        nameCache.get(call, session),
-                        config.permissions[session.userId]?.mapNotNull { allGames[it] } ?: emptyList()
-                    )
+                    if (session.userId == 0L) AuthData("TestUser", allGames.values.toList()) else
+                        AuthData(
+                            nameCache.get(call, session),
+                            config.permissions[session.userId]?.mapNotNull { allGames[it] } ?: emptyList()
+                        )
                 )
             }
             get("/reloadconfig") {
@@ -224,7 +230,8 @@ val apiGuard = createRouteScopedPlugin("AuthGuard") {
     }
 }
 
-fun ApplicationCall.sessionOrNull() = sessions.get<UserSession>()
+fun ApplicationCall.sessionOrNull() =
+    sessions.get<UserSession>() ?: if (config.devMode) UserSession("dev", "dev", 0, 0) else null
 
 fun ApplicationCall.sessionOrUnauthorized(): UserSession? {
     return sessionOrNull() ?: run {

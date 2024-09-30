@@ -248,9 +248,9 @@ fun ApplicationCall.sessionOrNull() =
         0
     ) else null
 
-fun ApplicationCall.sessionOrUnauthorized(): UserSession? {
+suspend fun ApplicationCall.sessionOrUnauthorized(): UserSession? {
     return sessionOrNull() ?: run {
-        response.status(HttpStatusCode.Unauthorized)
+        respond(HttpStatusCode.Unauthorized)
         null
     }
 }

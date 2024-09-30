@@ -8,9 +8,14 @@ import de.tectoast.games.wizard.model.GameData
 import de.tectoast.games.wizard.model.WSMessage
 import de.tectoast.games.wizard.model.WSMessage.*
 import io.ktor.serialization.deserialize
+import io.ktor.server.http.content.staticFiles
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
+import io.ktor.websocket.send
 import mu.KotlinLogging
+import java.io.File
 
 data class WizardSession(val token: String)
 
@@ -18,6 +23,15 @@ val logger = KotlinLogging.logger {}
 
 
 fun Route.wizard() {
+
+    webSocket("/echo") {
+        for (frame in incoming) {
+            frame as? Frame.Text ?: continue
+            send(frame.readText())
+        }
+    }
+
+    staticFiles("/cardimages", File("cards/wizard"), index = null)
 
     webSocket("/ws") {
         try {
@@ -80,7 +94,8 @@ object GameManager {
     private val games = mutableMapOf<Int, Game>()
 
     suspend fun updateOpenGames(socket: WebSocketServerSession?) {
-        val openGames = OpenGames(games.filter { !it.value.isRunning }.map { GameData(it.value.owner, it.key) })
+//        val openGames = OpenGames(games.filter { !it.value.isRunning }.map { GameData(it.value.owner, it.key) })
+        val openGames = OpenGames((1..5).map { GameData("TestUser$it", it) })
         socket?.sendWS(openGames) ?: SocketManager.broadcastToEveryConnectedClient(openGames)
     }
 

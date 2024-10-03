@@ -55,15 +55,16 @@ fun Route.wizard() {
                 when (msg) {
                     null -> {}
                     is CreateGame -> {
-                        val g = Game(username)
-                        val id = GameManager.register(g)
+                        val id = GameManager.generateGameId()
+                        val g = Game(id, username)
+                        GameManager.register(id, g)
                         sendWS(GameCreated(id))
                         GameManager.updateOpenGames(null)
                     }
 
                     is JoinGame -> {
                         game = gameOrRedirectHome(msg.gameID) ?: continue
-                        if (game.isRunning) {
+                        if (game.phase == GamePhase.RUNNING) {
                             game.updateLobby()
                             game.sendCurrentState(username)
                         } else {
@@ -71,7 +72,6 @@ fun Route.wizard() {
                         }
                     }
 
-                    is DeleteGame -> GameManager.removeGame(msg.gameID)
                     else -> {
                         game.handleMessage(this, msg, username)
                     }
@@ -94,19 +94,22 @@ object GameManager {
     private val games = mutableMapOf<Int, Game>()
 
     suspend fun updateOpenGames(socket: WebSocketServerSession?) {
-//        val openGames = OpenGames(games.filter { !it.value.isRunning }.map { GameData(it.value.owner, it.key) })
-        val openGames = OpenGames((1..5).map { GameData("TestUser$it", it) })
+        val openGames = OpenGames(games.filter { it.value.phase == GamePhase.LOBBY }.map { GameData(it.value.owner, it.key) })
+//        val openGames = OpenGames((1..5).map { GameData("TestUser$it", it) })
         socket?.sendWS(openGames) ?: SocketManager.broadcastToEveryConnectedClient(openGames)
     }
 
     fun findGame(id: Int) = games[id]
 
-    fun register(game: Game): Int {
+    fun register(id: Int, game: Game) {
+        games[id] = game
+    }
+
+    fun generateGameId(): Int {
         var id = 0
         while (id in games) {
             id++
         }
-        games[id] = game
         return id
     }
 

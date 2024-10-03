@@ -8,10 +8,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import mu.KotlinLogging
 import kotlin.math.abs
 
-class Game(val owner: String) {
+class Game(val id: Int, val owner: String) {
     val stitchGoals = mutableMapOf<String, Int>()
     val stitchDone = mutableMapOf<String, Int>()
     val points = mutableMapOf<String, Int>()
@@ -19,7 +20,7 @@ class Game(val owner: String) {
     val layedCards = mutableMapOf<String, Card>()
     var trump: Card = NOTHINGCARD
     var players = mutableSetOf<String>()
-    var isRunning = false
+    var phase = GamePhase.LOBBY
     var currentPlayer = "Ofl"
     var roundPlayers = mutableListOf<String>()
     var round = 0
@@ -243,7 +244,7 @@ class Game(val owner: String) {
     suspend fun start() {
         players = players.shuffled().toMutableSet()
         players.forEach { points[it] = 0 }
-        isRunning = true
+        phase = GamePhase.RUNNING
         broadcast(GameStarted(players))
         nextRound(true)
     }
@@ -278,8 +279,24 @@ class Game(val owner: String) {
             }
 
             is LeaveGame -> {
-                removePlayer(username)
-                socket.sendWS(RedirectHome)
+                // TODO: Check which phase and probably change owner etc (or delete the game)
+                when (phase) {
+                    GamePhase.LOBBY -> {
+                        if (username == owner) {
+                            GameManager.removeGame(id)
+                        }
+                        removePlayer(username)
+                        socket.sendWS(RedirectHome)
+                    }
+                    GamePhase.RUNNING -> {
+                        endGame()
+                        phase = GamePhase.FINISHED
+                    }
+                    GamePhase.FINISHED -> {
+                        GameManager.removeGame(id)
+                        socket.sendWS(RedirectHome)
+                    }
+                }
             }
 
             is StitchGoal -> {
@@ -329,6 +346,7 @@ class Game(val owner: String) {
 
 }
 
+@Serializable
 enum class Rules(val options: List<String>) {
     @SerialName("Punkte")
     POINTS(listOf("Normal", "Max. 30")),
@@ -346,4 +364,8 @@ enum class Rules(val options: List<String>) {
     @SerialName("Trumpf")
     TRUMP(listOf("Normal", "Nur Farben")),
 
+}
+
+enum class GamePhase {
+    LOBBY, RUNNING, FINISHED
 }

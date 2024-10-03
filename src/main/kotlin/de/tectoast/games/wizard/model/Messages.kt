@@ -24,10 +24,6 @@ sealed class WSMessage {
     data object StartGame : WSMessage()
 
     @Serializable
-    @SerialName("DeleteGame")
-    data class DeleteGame(val gameID: Int) : WSMessage()
-
-    @Serializable
     @SerialName("LeaveGame")
     data class LeaveGame(val gameID: Int) : WSMessage()
 
@@ -43,6 +39,9 @@ sealed class WSMessage {
     @SerialName("LayCard")
     data class LayCard(val card: Card) : WSMessage()
 
+    @Serializable
+    @SerialName("RuleChangeRequest")
+    data class RuleChangeRequest(val rule: Rules, val value: String) : WSMessage()
 
     // ############################### RESPONSES ###############################
     @Serializable
@@ -56,10 +55,6 @@ sealed class WSMessage {
     @Serializable
     @SerialName("RuleChange")
     data class RuleChange(val rules: Map<Rules, String>) : WSMessage()
-
-    @Serializable
-    @SerialName("RuleChangeRequest")
-    data class RuleChangeRequest(val rule: Rules, val value: String) : WSMessage()
 
     @Serializable
     @SerialName("EndGame")

@@ -103,12 +103,12 @@ fun Application.module() {
                         call.respondRedirect("/error/notwhitelisted")
                         return@get
                     }
-                    println(principal.refreshToken)
+                    println(principal)
                     call.sessions.set(
                         UserSession(
                             accessToken,
                             principal.refreshToken!!,
-                            principal.expiresIn,
+                            System.currentTimeMillis() + principal.expiresIn * 1000,
                             user.id
                         )
                     )

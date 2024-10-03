@@ -75,7 +75,6 @@ fun Route.musicQuiz() {
                     return@webSocket
                 }
             }.getOrNull()
-            println(msg)
             when (msg) {
                 null -> {}
                 is Join -> {
@@ -209,7 +208,6 @@ private val musicQuizLogger = KotlinLogging.logger {}
 
 // lavaplayer isn't super kotlin-friendly, so we'll make it nicer to work with
 suspend fun AudioPlayerManager.playTrack(query: String, player: AudioPlayer): AudioTrack {
-    println("Playing $query")
     val track = suspendCoroutine<AudioTrack> {
         this.loadItem(query, object : AudioLoadResultHandler {
             override fun trackLoaded(track: AudioTrack) {

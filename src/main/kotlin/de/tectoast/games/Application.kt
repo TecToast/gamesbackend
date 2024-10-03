@@ -30,7 +30,6 @@ import org.slf4j.event.Level
 import java.io.File
 import java.time.Duration
 import kotlin.system.exitProcess
-import kotlin.time.Duration.Companion.days
 import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
 
 lateinit var config: Config
@@ -39,13 +38,13 @@ lateinit var discordAuthDB: Database
 
 val nameCache by lazy {
     OAuthExpiringMap<UserSession, String>(
-        1.days,
         clientId = "723829878755164202",
         clientSecret = config.oauth2Secret,
-        sessionUpdater = { session, accessToken, expires ->
+        sessionUpdater = { session, data ->
             session.copy(
-                accessToken = accessToken,
-                expires = expires
+                accessToken = data.accessToken,
+                refreshToken = data.refreshToken,
+                expires = data.expires
             )
         },
     ) { accessToken ->
@@ -104,6 +103,7 @@ fun Application.module() {
                         call.respondRedirect("/error/notwhitelisted")
                         return@get
                     }
+                    println(principal.refreshToken)
                     call.sessions.set(
                         UserSession(
                             accessToken,

@@ -42,7 +42,7 @@ val httpClient = HttpClient(CIO) {
 private val userdataCache = SizeLimitedMap<String, DiscordUser>(50)
 suspend fun HttpClient.getUserData(accessToken: String): DiscordUser {
     return userdataCache.getOrPut(accessToken) {
-        logger.info("Fetching user data for $accessToken")
+        logger.info("Fetching user data for ${accessToken.take(5)}")
         getWithToken("https://discord.com/api/users/@me", accessToken)
     }
 }

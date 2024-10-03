@@ -4,9 +4,9 @@ import io.ktor.server.sessions.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.sql.upsert
 
 object DiscordAuthDB : Table("discordauth"), SessionStorage {
     val ID = varchar("id", 32)
@@ -21,7 +21,7 @@ object DiscordAuthDB : Table("discordauth"), SessionStorage {
 
     override suspend fun write(id: String, value: String) {
         newSuspendedTransaction(db = discordAuthDB) {
-            insertIgnore {
+            upsert {
                 it[this.ID] = id
                 it[this.VALUE] = value
             }

@@ -4,8 +4,8 @@ import de.tectoast.games.discord.jda
 import de.tectoast.games.httpClient
 import dev.minn.jda.ktx.coroutines.await
 import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.request.setBody
+import io.ktor.client.request.forms.submitForm
+import io.ktor.http.parameters
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.sessions.sessions
 import io.ktor.server.sessions.set
@@ -36,58 +36,52 @@ interface OAuthSession {
 }
 
 @Serializable
-class RefreshRequest(
-    @SerialName("grant_type") val grantType: String = "refresh_token",
-    @SerialName("client_id") val clientId: String,
-    @SerialName("client_secret") val clientSecret: String,
-    @SerialName("refresh_token") val refreshToken: String,
-)
-
-@Serializable
 class AccessTokenResponse(
     @SerialName("access_token") val accessToken: String,
     @SerialName("expires_in") val expiresIn: Long,
     @SerialName("refresh_token") val refreshToken: String,
 )
 
+data class SessionUpdaterData(
+    val accessToken: String,
+    val refreshToken: String,
+    val expires: Long,
+)
+
 class OAuthExpiringMap<D : OAuthSession, V>(
-    val duration: Duration,
     val clientId: String,
     val clientSecret: String,
-    val sessionUpdater: (D, String, Long) -> D,
+    val sessionUpdater: (D, SessionUpdaterData) -> D,
     val updater: suspend (String) -> V
 ) {
-    val internalMap: MutableMap<String, V> = mutableMapOf()
-    val lastUpdate = mutableMapOf<String, Instant>()
     suspend inline fun <reified S : OAuthSession> get(call: ApplicationCall, data: S): V {
-        val key = data.refreshToken
         val currentTime = Clock.System.now()
-        val lastUpdate = lastUpdate[key]
-        if (lastUpdate == null || lastUpdate + duration < currentTime) {
+        val accessToken = if (data.expires + 600000 < currentTime.toEpochMilliseconds()) {
             var response: AccessTokenResponse? = null
-            val accessToken =
-                if (data.expires + 600000 < currentTime.toEpochMilliseconds()) {
-                    // Fetch new access token
-                    response = httpClient.get("https://discord.com/api/oauth2/token") {
-                        setBody(
-                            RefreshRequest(
-                                refreshToken = data.refreshToken,
-                                clientId = clientId,
-                                clientSecret = clientSecret
-                            )
-                        )
-                    }.body<AccessTokenResponse>()
-                    call.sessions.set<S>(sessionUpdater(data as D, response.accessToken, currentTime.toEpochMilliseconds() + response.expiresIn) as S)
-                    response.accessToken
-                } else {
-                    data.accessToken
-                }
-            val value = updater(accessToken)
-            internalMap[key] = value
-            this.lastUpdate[key] = currentTime
-            return value
-        }
-        return internalMap[key]!!
+
+            // Fetch new access token
+            response = httpClient.submitForm("https://discord.com/api/v10/oauth2/token",
+                formParameters = parameters {
+                    append("grant_type", "refresh_token")
+                    append("refresh_token", data.refreshToken)
+                    append("client_id", clientId)
+                    append("client_secret", clientSecret)
+                }) {
+            }.body<AccessTokenResponse>()
+            @Suppress("UNCHECKED_CAST")
+            call.sessions.set<S>(
+                sessionUpdater(
+                    data as D,
+                    SessionUpdaterData(
+                        response.accessToken,
+                        response.refreshToken,
+                        currentTime.toEpochMilliseconds() + response.expiresIn
+                    )
+                ) as S
+            )
+            response.accessToken
+        } else data.accessToken
+        return updater(accessToken)
     }
 }
 

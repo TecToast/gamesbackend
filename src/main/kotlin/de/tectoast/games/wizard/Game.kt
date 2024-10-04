@@ -232,7 +232,7 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun layCard(name: String, card: Card) {
-        if (name != currentPlayer) return
+        if (name != currentPlayer || isPredict) return
         val playerCards = cards[name]!!
         if (card !in playerCards) return
         firstCard?.let { fc ->

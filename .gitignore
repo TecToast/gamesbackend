@@ -36,3 +36,5 @@ out/
 .vscode/
 
 config.json
+cards
+media

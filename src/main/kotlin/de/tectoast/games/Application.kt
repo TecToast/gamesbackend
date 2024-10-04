@@ -144,7 +144,7 @@ fun Application.module() {
             get("/mygames") {
                 val session = call.sessionOrNull()
                 if (session == null) {
-                    call.respond(emptyList<GameMeta>())
+                    call.respond(AuthData("", emptyList()))
                     return@get
                 }
                 call.respond(

@@ -8,8 +8,8 @@ import kotlinx.serialization.Serializable
 sealed class WSMessage {
 
     @Serializable
-    @SerialName("WSLoginResponse")
-    data class WSLoginResponse(val username: String?) : WSMessage()
+    @SerialName("ChangeUsernameResponse")
+    data class ChangeUsernameResponse(val username: String) : WSMessage()
 
     @Serializable
     @SerialName("CreateGame")
@@ -28,10 +28,6 @@ sealed class WSMessage {
     data class LeaveGame(val gameID: Int) : WSMessage()
 
     @Serializable
-    @SerialName("ExitGame")
-    data object ExitGame : WSMessage()
-
-    @Serializable
     @SerialName("StitchGoal")
     data class StitchGoal(val name: String? = null, val goal: Int) : WSMessage()
 
@@ -42,6 +38,10 @@ sealed class WSMessage {
     @Serializable
     @SerialName("RuleChangeRequest")
     data class RuleChangeRequest(val rule: Rules, val value: String) : WSMessage()
+
+    @Serializable
+    @SerialName("ChangeUsername")
+    data class ChangeUsername(val username: String) : WSMessage()
 
     // ############################### RESPONSES ###############################
     @Serializable
@@ -107,10 +107,6 @@ sealed class WSMessage {
     @Serializable
     @SerialName("RedirectHome")
     data object RedirectHome : WSMessage()
-
-    @Serializable
-    @SerialName("Reset")
-    data object Reset : WSMessage()
 
     @Serializable
     @SerialName("HasPredicted")

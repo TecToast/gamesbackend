@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import mu.KotlinLogging
+import java.security.SecureRandom
 import kotlin.math.abs
 
 class Game(val id: Int, val owner: String) {
@@ -18,6 +19,7 @@ class Game(val id: Int, val owner: String) {
     val points = mutableMapOf<String, Int>()
     val cards = mutableMapOf<String, MutableList<Card>>()
     val layedCards = mutableMapOf<String, Card>()
+    var firstCard: Card? = null
     var trump: Card = NOTHINGCARD
     var players = mutableSetOf<String>()
     var phase = GamePhase.LOBBY
@@ -102,16 +104,16 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun nextRound(nodelay: Boolean) {
         delay(if (nodelay) 0 else 5000)
-        if (round * players.size >= 60) {
+        if (++round * players.size > 60) {
             endGame()
             return
         }
-        round++
         giveCards(round)
         roundPlayers = generateStitchOrder().toMutableList()
         broadcast(Round(round = round, firstCome = roundPlayers[1]))
+        broadcast(IsPredict(true))
+        originalOrderForSubround = roundPlayers.toList()
         if (checkRule(Rules.PREDICTION) == "Nacheinander") {
-            originalOrderForSubround = roundPlayers.toList()
             nextPlayer()
         } else {
             broadcast {
@@ -123,10 +125,12 @@ class Game(val id: Int, val owner: String) {
     private fun addPoints(player: String, amount: Int) = points.add(player, amount)
     private fun <T> MutableMap<T, Int>.add(key: T, value: Int) = compute(key) { _, v -> (v ?: 0) + value }
 
+    private val rnd = SecureRandom()
+
     suspend fun giveCards(round: Int) {
-        val stack = allCards.shuffled() as MutableList<Card>
+        val stack = allCards.shuffled(rnd) as MutableList<Card>
         cards.clear()
-        for (i in 0..<round) {
+        repeat(round) {
             for (player in players) {
                 cards.getOrPut(player) { mutableListOf() }.add(stack.removeFirstOrNull() ?: NOTHINGCARD)
             }
@@ -152,6 +156,7 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun newSubround(winner: String) {
         layedCards.clear()
+        firstCard = null
         if (cards[winner]!!.isEmpty()) {
             val results = buildMap {
                 players.forEach { p ->
@@ -232,9 +237,16 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun layCard(name: String, card: Card) {
-        if (name != currentPlayer) return
+        if (name != currentPlayer || isPredict) return
         val playerCards = cards[name]!!
         if (card !in playerCards) return
+        firstCard?.let { fc ->
+            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || fc.color == Color.MAGICIAN) return@let
+            if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
+        }
+        if (layedCards.values.all { it.color == Color.FOOL }) {
+            firstCard = card
+        }
         layedCards[name] = card
         playerCards.remove(card)
         broadcast(PlayerCard(LayedCard(card, name)))
@@ -242,6 +254,7 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun start() {
+        if (phase != GamePhase.LOBBY) return
         players = players.shuffled().toMutableSet()
         players.forEach { points[it] = 0 }
         phase = GamePhase.RUNNING
@@ -253,19 +266,32 @@ class Game(val id: Int, val owner: String) {
         // TODO
         with(SocketManager[username]) {
             sendWS(Cards(cards[username].orEmpty()))
-            sendWS(CurrentPlayer(currentPlayer))
             sendWS(Trump(trump, emptyMap()))
             sendWS(Round(round, originalOrderForSubround[1]))
             sendWS(IsPredict(isPredict))
-            stitchGoals.forEach { (user, num) ->
-                sendWS(StitchGoal(user, num))
-            }
             stitchDone.forEach { (user, num) ->
                 sendWS(UpdateDoneStitches(user, num))
             }
             sendWS(GameStarted(players))
             layedCards.entries.forEach {
                 sendWS(PlayerCard(LayedCard(it.value, it.key)))
+            }
+            val isBlind = checkRule(Rules.PREDICTION) == "Blind"
+
+            if(isBlind) {
+                stitchGoals.keys.forEach {
+                    sendWS(HasPredicted(it))
+                }
+                if(isPredict) {
+                    sendWS(CurrentPlayer(username))
+                } else {
+                    sendWS(CurrentPlayer(currentPlayer))
+                }
+            } else {
+                stitchGoals.forEach { (user, num) ->
+                    sendWS(StitchGoal(user, num))
+                }
+                sendWS(CurrentPlayer(currentPlayer))
             }
         }
     }
@@ -288,10 +314,12 @@ class Game(val id: Int, val owner: String) {
                         removePlayer(username)
                         socket.sendWS(RedirectHome)
                     }
+
                     GamePhase.RUNNING -> {
                         endGame()
                         phase = GamePhase.FINISHED
                     }
+
                     GamePhase.FINISHED -> {
                         GameManager.removeGame(id)
                         socket.sendWS(RedirectHome)
@@ -300,9 +328,12 @@ class Game(val id: Int, val owner: String) {
             }
 
             is StitchGoal -> {
+                if (!isPredict) return
+                val default = checkRule(Rules.PREDICTION) == "Nacheinander"
+                if (default && username != currentPlayer) return
                 stitchGoals[username] = msg.goal
                 stitchDone[username] = 0
-                if (checkRule(Rules.PREDICTION) == "Nacheinander") {
+                if (default) {
                     updateStitches(username)
                     nextPlayer()
                 } else {
@@ -311,15 +342,12 @@ class Game(val id: Int, val owner: String) {
             }
 
             is RuleChangeRequest -> {
-                changeRule(msg.rule, msg.value)
+                if (username == owner)
+                    changeRule(msg.rule, msg.value)
             }
 
             is LayCard -> {
                 layCard(username, msg.card)
-            }
-
-            is ExitGame -> {
-                endGame()
             }
 
             else -> {

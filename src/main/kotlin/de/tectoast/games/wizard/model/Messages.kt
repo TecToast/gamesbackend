@@ -28,10 +28,6 @@ sealed class WSMessage {
     data class LeaveGame(val gameID: Int) : WSMessage()
 
     @Serializable
-    @SerialName("ExitGame")
-    data object ExitGame : WSMessage()
-
-    @Serializable
     @SerialName("StitchGoal")
     data class StitchGoal(val name: String? = null, val goal: Int) : WSMessage()
 

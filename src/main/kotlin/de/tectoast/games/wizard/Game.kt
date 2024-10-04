@@ -317,10 +317,6 @@ class Game(val id: Int, val owner: String) {
                 layCard(username, msg.card)
             }
 
-            is ExitGame -> {
-                endGame()
-            }
-
             else -> {
                 logger.warn { "Unknown message: $msg" }
             }

@@ -7,6 +7,7 @@ import de.tectoast.games.sessionOrNull
 import de.tectoast.games.wizard.model.GameData
 import de.tectoast.games.wizard.model.WSMessage
 import de.tectoast.games.wizard.model.WSMessage.*
+import io.ktor.http.CacheControl
 import io.ktor.serialization.deserialize
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.routing.*
@@ -21,7 +22,11 @@ val logger = KotlinLogging.logger {}
 
 fun Route.wizard() {
 
-    staticFiles("/cardimages", File("cards/wizard"), index = null)
+    staticFiles("/cardimages", File("cards/wizard"), index = null) {
+        cacheControl {
+            listOf(CacheControl.MaxAge(365 * 24 * 60 * 60))
+        }
+    }
 
     webSocket("/ws") {
         try {

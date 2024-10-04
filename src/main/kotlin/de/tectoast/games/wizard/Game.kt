@@ -126,7 +126,7 @@ class Game(val id: Int, val owner: String) {
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled() as MutableList<Card>
         cards.clear()
-        for (i in 0..<round) {
+        repeat(round) {
             for (player in players) {
                 cards.getOrPut(player) { mutableListOf() }.add(stack.removeFirstOrNull() ?: NOTHINGCARD)
             }

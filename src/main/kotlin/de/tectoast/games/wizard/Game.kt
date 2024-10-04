@@ -152,6 +152,7 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun newSubround(winner: String) {
         layedCards.clear()
+        firstCard = null
         if (cards[winner]!!.isEmpty()) {
             val results = buildMap {
                 players.forEach { p ->

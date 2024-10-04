@@ -18,6 +18,7 @@ class Game(val id: Int, val owner: String) {
     val points = mutableMapOf<String, Int>()
     val cards = mutableMapOf<String, MutableList<Card>>()
     val layedCards = mutableMapOf<String, Card>()
+    var firstCard: Card? = null
     var trump: Card = NOTHINGCARD
     var players = mutableSetOf<String>()
     var phase = GamePhase.LOBBY
@@ -234,6 +235,13 @@ class Game(val id: Int, val owner: String) {
         if (name != currentPlayer) return
         val playerCards = cards[name]!!
         if (card !in playerCards) return
+        firstCard?.let { fc ->
+            if(card.color == Color.MAGICIAN || card.color == Color.FOOL || fc.color == Color.MAGICIAN) return@let
+            if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
+        }
+        if(layedCards.values.all { it.color == Color.FOOL }) {
+            firstCard = card
+        }
         layedCards[name] = card
         playerCards.remove(card)
         broadcast(PlayerCard(LayedCard(card, name)))
@@ -287,10 +295,12 @@ class Game(val id: Int, val owner: String) {
                         removePlayer(username)
                         socket.sendWS(RedirectHome)
                     }
+
                     GamePhase.RUNNING -> {
                         endGame()
                         phase = GamePhase.FINISHED
                     }
+
                     GamePhase.FINISHED -> {
                         GameManager.removeGame(id)
                         socket.sendWS(RedirectHome)
@@ -299,9 +309,12 @@ class Game(val id: Int, val owner: String) {
             }
 
             is StitchGoal -> {
+                if (!isPredict) return
+                val default = checkRule(Rules.PREDICTION) == "Nacheinander"
+                if (default && username != currentPlayer) return
                 stitchGoals[username] = msg.goal
                 stitchDone[username] = 0
-                if (checkRule(Rules.PREDICTION) == "Nacheinander") {
+                if (default) {
                     updateStitches(username)
                     nextPlayer()
                 } else {
@@ -310,7 +323,8 @@ class Game(val id: Int, val owner: String) {
             }
 
             is RuleChangeRequest -> {
-                changeRule(msg.rule, msg.value)
+                if (username == owner)
+                    changeRule(msg.rule, msg.value)
             }
 
             is LayCard -> {

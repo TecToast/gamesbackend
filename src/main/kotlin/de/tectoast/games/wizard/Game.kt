@@ -111,8 +111,9 @@ class Game(val id: Int, val owner: String) {
         giveCards(round)
         roundPlayers = generateStitchOrder().toMutableList()
         broadcast(Round(round = round, firstCome = roundPlayers[1]))
+        broadcast(IsPredict(true))
+        originalOrderForSubround = roundPlayers.toList()
         if (checkRule(Rules.PREDICTION) == "Nacheinander") {
-            originalOrderForSubround = roundPlayers.toList()
             nextPlayer()
         } else {
             broadcast {
@@ -240,10 +241,10 @@ class Game(val id: Int, val owner: String) {
         val playerCards = cards[name]!!
         if (card !in playerCards) return
         firstCard?.let { fc ->
-            if(card.color == Color.MAGICIAN || card.color == Color.FOOL || fc.color == Color.MAGICIAN) return@let
+            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || fc.color == Color.MAGICIAN) return@let
             if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
         }
-        if(layedCards.values.all { it.color == Color.FOOL }) {
+        if (layedCards.values.all { it.color == Color.FOOL }) {
             firstCard = card
         }
         layedCards[name] = card
@@ -253,6 +254,7 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun start() {
+        if (phase != GamePhase.LOBBY) return
         players = players.shuffled().toMutableSet()
         players.forEach { points[it] = 0 }
         phase = GamePhase.RUNNING
@@ -264,19 +266,32 @@ class Game(val id: Int, val owner: String) {
         // TODO
         with(SocketManager[username]) {
             sendWS(Cards(cards[username].orEmpty()))
-            sendWS(CurrentPlayer(currentPlayer))
             sendWS(Trump(trump, emptyMap()))
             sendWS(Round(round, originalOrderForSubround[1]))
             sendWS(IsPredict(isPredict))
-            stitchGoals.forEach { (user, num) ->
-                sendWS(StitchGoal(user, num))
-            }
             stitchDone.forEach { (user, num) ->
                 sendWS(UpdateDoneStitches(user, num))
             }
             sendWS(GameStarted(players))
             layedCards.entries.forEach {
                 sendWS(PlayerCard(LayedCard(it.value, it.key)))
+            }
+            val isBlind = checkRule(Rules.PREDICTION) == "Blind"
+
+            if(isBlind) {
+                stitchGoals.keys.forEach {
+                    sendWS(HasPredicted(it))
+                }
+                if(isPredict) {
+                    sendWS(CurrentPlayer(username))
+                } else {
+                    sendWS(CurrentPlayer(currentPlayer))
+                }
+            } else {
+                stitchGoals.forEach { (user, num) ->
+                    sendWS(StitchGoal(user, num))
+                }
+                sendWS(CurrentPlayer(currentPlayer))
             }
         }
     }

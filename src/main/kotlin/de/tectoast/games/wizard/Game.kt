@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import mu.KotlinLogging
+import java.security.SecureRandom
 import kotlin.math.abs
 
 class Game(val id: Int, val owner: String) {
@@ -123,8 +124,10 @@ class Game(val id: Int, val owner: String) {
     private fun addPoints(player: String, amount: Int) = points.add(player, amount)
     private fun <T> MutableMap<T, Int>.add(key: T, value: Int) = compute(key) { _, v -> (v ?: 0) + value }
 
+    private val rnd = SecureRandom()
+
     suspend fun giveCards(round: Int) {
-        val stack = allCards.shuffled() as MutableList<Card>
+        val stack = allCards.shuffled(rnd) as MutableList<Card>
         cards.clear()
         repeat(round) {
             for (player in players) {

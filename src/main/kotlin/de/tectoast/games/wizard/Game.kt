@@ -102,11 +102,10 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun nextRound(nodelay: Boolean) {
         delay(if (nodelay) 0 else 5000)
-        if (round * players.size >= 60) {
+        if (++round * players.size > 60) {
             endGame()
             return
         }
-        round++
         giveCards(round)
         roundPlayers = generateStitchOrder().toMutableList()
         broadcast(Round(round = round, firstCome = roundPlayers[1]))

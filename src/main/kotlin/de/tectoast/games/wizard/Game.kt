@@ -305,7 +305,7 @@ class Game(val id: Int, val owner: String) {
         with(SocketManager[username]) {
             sendWS(Cards(cards[username].orEmpty()))
             sendWS(Trump(trump, emptyMap()))
-            sendWS(Round(round, originalOrderForSubround[1]))
+            sendWS(Round(round, originalOrderForSubround[1].takeIf { stitchGoals[username] == null } ?: ""))
             sendWS(IsPredict(isPredict))
             stitchDone.forEach { (user, num) ->
                 sendWS(UpdateDoneStitches(user, num))

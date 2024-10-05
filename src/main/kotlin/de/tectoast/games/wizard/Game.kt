@@ -47,7 +47,7 @@ class Game(val id: Int, val owner: String) {
             //Spezialkarten haben Color.Special
             //Bombe hat value 1
             //weitere Spezialkarten haben andere value-Werte
-            if (checkRule(Rules.SPECIALCARDS) == "aktiviert") {
+            if (checkRule(Rules.SPECIALCARDS) == "Aktiviert") {
                 add(BOMB)
             }
         }
@@ -419,7 +419,7 @@ enum class Rules(val options: List<String>) {
     TRUMP(listOf("Normal", "Nur Farben")),
 
     @SerialName("Spezialkarten")
-    SPECIALCARDS(listOf("aktiviert", "deaktiviert")),
+    SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),
 }
 
 enum class GamePhase {

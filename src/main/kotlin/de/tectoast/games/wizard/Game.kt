@@ -145,7 +145,8 @@ class Game(val id: Int, val owner: String) {
     private fun <T> MutableMap<T, Int>.add(key: T, value: Int) = compute(key) { _, v -> (v ?: 0) + value }
 
     private val rnd = SecureRandom()
-    val forcedCards = listOf<Card>(BOMB)
+    //for development and testing phase
+    val forcedCards = listOf<Card>()
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>

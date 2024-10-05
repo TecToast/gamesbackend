@@ -256,12 +256,13 @@ class Game(val id: Int, val owner: String) {
     /**
      * @return true if the card is higher than the first card or trump
      */
-    fun Card.isHigherThan(firstCardOrTrump: Card): Boolean {
+    fun Card.isHigherThan(highestCardUntilNow: Card): Boolean {
         if (this.color == Color.FOOL) return false
-        if (this == BOMB) return false
-        if (firstCardOrTrump.color == Color.FOOL) return true
-        if (this.color != firstCardOrTrump.color && this.color != trump.color) return false
-        if (this.color == firstCardOrTrump.color) return this.value > firstCardOrTrump.value
+        if (highestCardUntilNow == BOMB) return true
+        if (highestCardUntilNow.color == Color.FOOL) return true
+        if (this.color != highestCardUntilNow.color && this.color != trump.color) return false
+        if (this.color == highestCardUntilNow.color) return this.value > highestCardUntilNow.value
+        // we are trump and the other card isn't
         return true
     }
 

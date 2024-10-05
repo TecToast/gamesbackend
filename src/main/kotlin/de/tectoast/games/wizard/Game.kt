@@ -48,7 +48,7 @@ class Game(val id: Int, val owner: String) {
             //Bombe hat value 1
             //weitere Spezialkarten haben andere value-Werte
             if (checkRule(Rules.SPECIALCARDS) == "aktiviert") {
-                add(Card(Color.Special, 1))
+                add(BOMB)
             }
         }
     }
@@ -145,16 +145,19 @@ class Game(val id: Int, val owner: String) {
     private fun <T> MutableMap<T, Int>.add(key: T, value: Int) = compute(key) { _, v -> (v ?: 0) + value }
 
     private val rnd = SecureRandom()
+    val forcedCards = listOf<Card>(BOMB)
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>
         cards.clear()
+        forcedCards.forEach { stack.remove(it) }
+        val mutableForced = forcedCards.toMutableList()
         repeat(round) {
             for (player in players) {
-                cards.getOrPut(player) { mutableListOf() }.add(stack.removeFirstOrNull() ?: NOTHINGCARD)
+                cards.getOrPut(player) { mutableListOf() }
+                    .add(mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD)
             }
         }
-        cards["TestUser1"]!!.add(Card(Color.Special, 1))
         val shifted = mutableMapOf<String, Int>()
         trump = stack.removeFirstOrNull() ?: NOTHINGCARD
         if (checkRule(Rules.TRUMP) == "Nur Farben") {
@@ -174,9 +177,13 @@ class Game(val id: Int, val owner: String) {
         }
     }
 
-    suspend fun newSubround(winner: String?) {
+    /*
+    * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
+     */
+    suspend fun newSubround(winner: String, wasBombUsed: Boolean) {
         layedCards.clear()
         firstCard = null
+        val winnerMessage = NewSubRound(winner.takeUnless { wasBombUsed }, winner)
         if (cards[currentPlayer]!!.isEmpty()) {
             val results = buildMap {
                 players.forEach { p ->
@@ -192,14 +199,14 @@ class Game(val id: Int, val owner: String) {
             stitchDone.clear()
             isPredict = true
             broadcast(Results(results))
-            broadcast(NewSubRound(winner))
+            broadcast(winnerMessage)
             nextRound(false)
         } else {
             roundPlayers = players.toMutableList()
             while (roundPlayers.first() != winner) roundPlayers.add(roundPlayers.removeFirst())
             originalOrderForSubround = roundPlayers.toList()
             currentPlayer = roundPlayers.removeFirst()
-            broadcast(NewSubRound(winner))
+            broadcast(winnerMessage)
         }
     }
 
@@ -215,10 +222,6 @@ class Game(val id: Int, val owner: String) {
             val firstPlayerOfRound = originalOrderForSubround[0]
             val winner =
                 when {
-                    layedCards.values.contains(Card(Color.Special, 1)) -> {
-                        null
-                    }
-
                     layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
                     layedCards.values.any { it.color == Color.MAGICIAN } -> {
                         if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
@@ -237,11 +240,13 @@ class Game(val id: Int, val owner: String) {
                         highest.second
                     }
                 }
-            if (winner != null) {
+            val wasBombUsed = layedCards.values.contains(BOMB)
+
+            if (!wasBombUsed) {
                 stitchDone.add(winner, 1)
                 broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
             }
-            newSubround(winner)
+            newSubround(winner, wasBombUsed)
             return
         }
         broadcast(CurrentPlayer(currentPlayer))
@@ -252,6 +257,7 @@ class Game(val id: Int, val owner: String) {
      */
     fun Card.isHigherThan(firstCardOrTrump: Card): Boolean {
         if (this.color == Color.FOOL) return false
+        if (this == BOMB) return false
         if (firstCardOrTrump.color == Color.FOOL) return true
         if (this.color != firstCardOrTrump.color && this.color != trump.color) return false
         if (this.color == firstCardOrTrump.color) return this.value > firstCardOrTrump.value
@@ -388,6 +394,7 @@ class Game(val id: Int, val owner: String) {
 
     companion object {
         val NOTHINGCARD = Card(Color.NOTHING, -1)
+        val BOMB = Card(Color.Special, 1)
         val logger = KotlinLogging.logger {}
     }
 

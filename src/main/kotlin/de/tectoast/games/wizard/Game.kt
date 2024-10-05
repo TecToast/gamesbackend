@@ -316,15 +316,11 @@ class Game(val id: Int, val owner: String) {
             }
             val isBlind = checkRule(Rules.PREDICTION) == "Blind"
 
-            if (isBlind) {
+            if (isBlind && isPredict) {
                 stitchGoals.keys.forEach {
                     sendWS(HasPredicted(it))
                 }
-                if (isPredict) {
-                    sendWS(CurrentPlayer(username))
-                } else {
-                    sendWS(CurrentPlayer(currentPlayer))
-                }
+                sendWS(CurrentPlayer(username))
             } else {
                 stitchGoals.forEach { (user, num) ->
                     sendWS(StitchGoal(user, num))

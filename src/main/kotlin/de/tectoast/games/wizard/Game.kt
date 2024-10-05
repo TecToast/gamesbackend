@@ -123,7 +123,7 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun nextRound(nodelay: Boolean) {
         delay(if (nodelay) 0 else 5000)
-        if (++round * players.size > 60) {
+        if (++round * players.size > allCards.size) {
             endGame()
             return
         }

@@ -29,27 +29,27 @@ fun Route.wizard() {
     }
 
     webSocket("/ws") {
-        try {
-            val session = call.sessionOrNull() ?: return@webSocket
-            var username =
-                if (config.devMode && session.userId == 0L) "TestUser" else nameCache.get<UserSession>(call, session)
-            // TODO: Split between display name for FrontEnd and Username/ID for backend (e.g. WS connections in SocketManager)
-            logger.info { "Username: $username" }
-
-            lateinit var game: Game
-            SocketManager.register(username, this)
-            GameManager.updateOpenGames(this)
-            for (frame in incoming) {
+        val session = call.sessionOrNull() ?: return@webSocket
+        var username =
+            if (config.devMode && session.userId == 0L) "TestUser" else nameCache.get<UserSession>(call, session)
+        // TODO: Split between display name for FrontEnd and Username/ID for backend (e.g. WS connections in SocketManager)
+        logger.info { "Username: $username" }
+        lateinit var game: Game
+        SocketManager.register(username, this)
+        GameManager.updateOpenGames(this)
+        for (frame in incoming) {
+            try {
                 val msg = converter?.deserialize<WSMessage>(frame)
                 when (msg) {
                     null -> {}
                     is ChangeUsername -> {
-                        if(config.devMode) {
+                        if (config.devMode) {
                             username = msg.username
                             SocketManager.register(username, this)
                             sendWS(ChangeUsernameResponse(username))
                         }
                     }
+
                     is CreateGame -> {
                         val id = GameManager.generateGameId()
                         val g = Game(id, username)
@@ -72,10 +72,10 @@ fun Route.wizard() {
                         game.handleMessage(this, msg, username)
                     }
                 }
+            } catch (e: Exception) {
+                logger.error(e.cause) { "Cause of Error in Websocket" }
+                logger.error(e) { "Error in Websocket" }
             }
-        } catch (e: Exception) {
-            logger.error(e.cause) { "Cause of Error in Websocket" }
-            logger.error(e) { "Error in Websocket" }
         }
     }
 }
@@ -91,7 +91,8 @@ object GameManager {
     private val games = mutableMapOf<Int, Game>()
 
     suspend fun updateOpenGames(socket: WebSocketServerSession?) {
-        val openGames = OpenGames(games.filter { it.value.phase == GamePhase.LOBBY }.map { GameData(it.value.owner, it.key) })
+        val openGames =
+            OpenGames(games.filter { it.value.phase == GamePhase.LOBBY }.map { GameData(it.value.owner, it.key) })
 //        val openGames = OpenGames((1..5).map { GameData("TestUser$it", it) })
         socket?.sendWS(openGames) ?: SocketManager.broadcastToEveryConnectedClient(openGames)
     }

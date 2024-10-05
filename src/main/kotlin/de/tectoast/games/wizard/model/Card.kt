@@ -16,6 +16,8 @@ enum class Color(val text: String) {
     MAGICIAN("Zauberer"),
     @SerialName("Narr")
     FOOL("Narr"),
+    @SerialName("Spezial")
+    Special("Spezial"),
     @SerialName("Nichts")
     NOTHING("Nichts")
 }

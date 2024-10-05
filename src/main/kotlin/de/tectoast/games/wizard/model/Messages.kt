@@ -86,7 +86,7 @@ sealed class WSMessage {
 
     @Serializable
     @SerialName("NewSubRound")
-    data class NewSubRound(val winner: String) : WSMessage()
+    data class NewSubRound(val winner: String?) : WSMessage()
 
     @Serializable
     @SerialName("IsPredict")

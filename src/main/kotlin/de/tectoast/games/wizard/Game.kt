@@ -33,6 +33,25 @@ class Game(val id: Int, val owner: String) {
             this[it] = it.options.first()
         }
     }
+    val allCards by lazy {
+        buildList {
+            for (color in listOf(Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE)) {
+                for (value in 1..13) {
+                    add(Card(color, value))
+                }
+            }
+            for (i in 1..4) {
+                add(Card(Color.MAGICIAN, i))
+                add(Card(Color.FOOL, i))
+            }
+            //Spezialkarten haben Color.Special
+            //Bombe hat value 1
+            //weitere Spezialkarten haben andere value-Werte
+            if (checkRule(Rules.SPECIALCARDS) == "aktiviert") {
+                add(Card(Color.Special, 1))
+            }
+        }
+    }
 
     private fun checkRule(rule: Rules) = rules[rule] ?: rule.options.first()
 
@@ -135,10 +154,11 @@ class Game(val id: Int, val owner: String) {
                 cards.getOrPut(player) { mutableListOf() }.add(stack.removeFirstOrNull() ?: NOTHINGCARD)
             }
         }
+        cards["TestUser1"]!!.add(Card(Color.Special, 1))
         val shifted = mutableMapOf<String, Int>()
         trump = stack.removeFirstOrNull() ?: NOTHINGCARD
         if (checkRule(Rules.TRUMP) == "Nur Farben") {
-            val forbidden = listOf(Color.MAGICIAN, Color.FOOL)
+            val forbidden = listOf(Color.MAGICIAN, Color.FOOL, Color.Special)
             while (trump.color in forbidden) {
                 trump = stack.removeFirstOrNull() ?: NOTHINGCARD
                 if (trump.color in forbidden) shifted.add(trump.color.text, 1)
@@ -154,10 +174,10 @@ class Game(val id: Int, val owner: String) {
         }
     }
 
-    suspend fun newSubround(winner: String) {
+    suspend fun newSubround(winner: String?) {
         layedCards.clear()
         firstCard = null
-        if (cards[winner]!!.isEmpty()) {
+        if (cards[currentPlayer]!!.isEmpty()) {
             val results = buildMap {
                 players.forEach { p ->
                     val amount =
@@ -193,27 +213,34 @@ class Game(val id: Int, val owner: String) {
                 return nextPlayer()
             }
             val firstPlayerOfRound = originalOrderForSubround[0]
-            val winner = when {
-                layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
-                layedCards.values.any { it.color == Color.MAGICIAN } -> {
-                    if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
-                    else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
-                }
-
-                else -> {
-                    var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
-                    for (i in 1..<players.size) {
-                        val playerToCheck = originalOrderForSubround[i]
-                        val card = layedCards[playerToCheck]!!
-                        if (card.isHigherThan(highest.first)) {
-                            highest = card to playerToCheck
-                        }
+            val winner =
+                when {
+                    layedCards.values.contains(Card(Color.Special, 1)) -> {
+                        null
                     }
-                    highest.second
+
+                    layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
+                    layedCards.values.any { it.color == Color.MAGICIAN } -> {
+                        if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
+                        else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
+                    }
+
+                    else -> {
+                        var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
+                        for (i in 1..<players.size) {
+                            val playerToCheck = originalOrderForSubround[i]
+                            val card = layedCards[playerToCheck]!!
+                            if (card.isHigherThan(highest.first)) {
+                                highest = card to playerToCheck
+                            }
+                        }
+                        highest.second
+                    }
                 }
+            if (winner != null) {
+                stitchDone.add(winner, 1)
+                broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
             }
-            stitchDone.add(winner, 1)
-            broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
             newSubround(winner)
             return
         }
@@ -241,7 +268,11 @@ class Game(val id: Int, val owner: String) {
         val playerCards = cards[name]!!
         if (card !in playerCards) return
         firstCard?.let { fc ->
-            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || fc.color == Color.MAGICIAN) return@let
+            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || card == Card(
+                    Color.Special,
+                    1
+                ) || fc.color == Color.MAGICIAN
+            ) return@let
             if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
         }
         if (layedCards.values.all { it.color == Color.FOOL }) {
@@ -263,7 +294,6 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun sendCurrentState(username: String) {
-        // TODO
         with(SocketManager[username]) {
             sendWS(Cards(cards[username].orEmpty()))
             sendWS(Trump(trump, emptyMap()))
@@ -278,11 +308,11 @@ class Game(val id: Int, val owner: String) {
             }
             val isBlind = checkRule(Rules.PREDICTION) == "Blind"
 
-            if(isBlind) {
+            if (isBlind) {
                 stitchGoals.keys.forEach {
                     sendWS(HasPredicted(it))
                 }
-                if(isPredict) {
+                if (isPredict) {
                     sendWS(CurrentPlayer(username))
                 } else {
                     sendWS(CurrentPlayer(currentPlayer))
@@ -342,7 +372,7 @@ class Game(val id: Int, val owner: String) {
             }
 
             is RuleChangeRequest -> {
-                if (username == owner)
+                if (username == owner && phase == GamePhase.LOBBY)
                     changeRule(msg.rule, msg.value)
             }
 
@@ -357,17 +387,6 @@ class Game(val id: Int, val owner: String) {
     }
 
     companion object {
-        val allCards = buildList {
-            for (color in listOf(Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE)) {
-                for (value in 1..13) {
-                    add(Card(color, value))
-                }
-            }
-            for (i in 1..4) {
-                add(Card(Color.MAGICIAN, i))
-                add(Card(Color.FOOL, i))
-            }
-        }
         val NOTHINGCARD = Card(Color.NOTHING, -1)
         val logger = KotlinLogging.logger {}
     }
@@ -392,6 +411,8 @@ enum class Rules(val options: List<String>) {
     @SerialName("Trumpf")
     TRUMP(listOf("Normal", "Nur Farben")),
 
+    @SerialName("Spezialkarten")
+    SPECIALCARDS(listOf("aktiviert", "deaktiviert")),
 }
 
 enum class GamePhase {

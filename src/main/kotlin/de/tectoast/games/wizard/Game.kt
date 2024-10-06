@@ -37,18 +37,17 @@ class Game(val id: Int, val owner: String) {
         buildList {
             for (color in listOf(Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE)) {
                 for (value in 1..13) {
-                    add(Card(color, value))
+                    add(Card(color, value.toFloat()))
                 }
             }
             for (i in 1..4) {
-                add(Card(Color.MAGICIAN, i))
-                add(Card(Color.FOOL, i))
+                add(Card(Color.MAGICIAN, i.toFloat()))
+                add(Card(Color.FOOL, i.toFloat()))
             }
-            //Spezialkarten haben Color.Special
-            //Bombe hat value 1
-            //weitere Spezialkarten haben andere value-Werte
             if (checkRule(Rules.SPECIALCARDS) == "Aktiviert") {
                 add(BOMB)
+                add(SEVENPOINTFIVE)
+                add(NINEPOINTSEVENFIVE)
             }
         }
     }
@@ -145,7 +144,8 @@ class Game(val id: Int, val owner: String) {
     private fun <T> MutableMap<T, Int>.add(key: T, value: Int) = compute(key) { _, v -> (v ?: 0) + value }
 
     private val rnd = SecureRandom()
-    //for development and testing phase
+
+    //TODO for development and testing phase
     val forcedCards = listOf<Card>()
 
     suspend fun giveCards(round: Int) {
@@ -221,26 +221,25 @@ class Game(val id: Int, val owner: String) {
                 return nextPlayer()
             }
             val firstPlayerOfRound = originalOrderForSubround[0]
-            val winner =
-                when {
-                    layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
-                    layedCards.values.any { it.color == Color.MAGICIAN } -> {
-                        if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
-                        else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
-                    }
-
-                    else -> {
-                        var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
-                        for (i in 1..<players.size) {
-                            val playerToCheck = originalOrderForSubround[i]
-                            val card = layedCards[playerToCheck]!!
-                            if (card.isHigherThan(highest.first)) {
-                                highest = card to playerToCheck
-                            }
-                        }
-                        highest.second
-                    }
+            val winner = when {
+                layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
+                layedCards.values.any { it.color == Color.MAGICIAN } -> {
+                    if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
+                    else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
                 }
+
+                else -> {
+                    var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
+                    for (i in 1..<players.size) {
+                        val playerToCheck = originalOrderForSubround[i]
+                        val card = layedCards[playerToCheck]!!
+                        if (card.isHigherThan(highest.first)) {
+                            highest = card to playerToCheck
+                        }
+                    }
+                    highest.second
+                }
+            }
             val wasBombUsed = layedCards.values.contains(BOMB)
 
             if (!wasBombUsed) {
@@ -271,23 +270,24 @@ class Game(val id: Int, val owner: String) {
         broadcast(RuleChange(rules))
     }
 
-    suspend fun layCard(name: String, card: Card) {
+    suspend fun layCard(name: String, layCard: LayCard) {
         if (name != currentPlayer || isPredict) return
         val playerCards = cards[name]!!
-        if (card !in playerCards) return
+        val (realCard, selectedColor) = layCard
+        if (realCard !in playerCards) return
+        val card = selectedColor?.let {
+            if (!it.isNormalColor || realCard !in rainbowCards) return
+            realCard.copy(color = it)
+        } ?: realCard
         firstCard?.let { fc ->
-            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || card == Card(
-                    Color.Special,
-                    1
-                ) || fc.color == Color.MAGICIAN
-            ) return@let
+            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || card in specialCards || fc.color == Color.MAGICIAN || fc == BOMB) return@let
             if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
         }
         if (layedCards.values.all { it.color == Color.FOOL }) {
             firstCard = card
         }
         layedCards[name] = card
-        playerCards.remove(card)
+        playerCards.remove(realCard)
         broadcast(PlayerCard(LayedCard(card, name)))
         nextPlayer()
     }
@@ -376,12 +376,11 @@ class Game(val id: Int, val owner: String) {
             }
 
             is RuleChangeRequest -> {
-                if (username == owner && phase == GamePhase.LOBBY)
-                    changeRule(msg.rule, msg.value)
+                if (username == owner && phase == GamePhase.LOBBY) changeRule(msg.rule, msg.value)
             }
 
             is LayCard -> {
-                layCard(username, msg.card)
+                layCard(username, msg)
             }
 
             else -> {
@@ -391,9 +390,13 @@ class Game(val id: Int, val owner: String) {
     }
 
     companion object {
-        val NOTHINGCARD = Card(Color.NOTHING, -1)
-        val BOMB = Card(Color.Special, 1)
+        val NOTHINGCARD = Card(Color.NOTHING, -1f)
+        val BOMB = Card(Color.Special, 1f)
+        val SEVENPOINTFIVE = Card(Color.Special, 7.5f)
+        val NINEPOINTSEVENFIVE = Card(Color.Special, 9.75f)
         val logger = KotlinLogging.logger {}
+        val specialCards = setOf(BOMB, SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
+        val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
     }
 
 }

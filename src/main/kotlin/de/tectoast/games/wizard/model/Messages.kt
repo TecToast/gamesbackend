@@ -33,7 +33,7 @@ sealed class WSMessage {
 
     @Serializable
     @SerialName("LayCard")
-    data class LayCard(val card: Card) : WSMessage()
+    data class LayCard(val card: Card, val selectedColor: Color? = null) : WSMessage()
 
     @Serializable
     @SerialName("RuleChangeRequest")

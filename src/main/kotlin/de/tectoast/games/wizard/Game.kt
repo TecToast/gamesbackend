@@ -280,7 +280,7 @@ class Game(val id: Int, val owner: String) {
             realCard.copy(color = it)
         } ?: realCard
         firstCard?.let { fc ->
-            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || card in specialCards || fc.color == Color.MAGICIAN || fc == BOMB) return@let
+            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || realCard in specialCards || fc.color == Color.MAGICIAN || fc == BOMB) return@let
             if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
         }
         if (layedCards.values.all { it.color == Color.FOOL }) {

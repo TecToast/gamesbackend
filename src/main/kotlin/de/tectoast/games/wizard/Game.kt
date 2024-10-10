@@ -226,6 +226,11 @@ class Game(val id: Int, val owner: String) {
                     layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
                     layedCards.values.any { it.color == Color.MAGICIAN } -> {
                         if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
+                        else if (checkRule(Rules.MAGICIAN) == "Mittlerer Zauberer") {
+                            val numberOfWizards = layedCards.entries.count { it.value.color == Color.MAGICIAN }
+                            val winningWizardIndex = (numberOfWizards - 1) / 2
+                            layedCards.entries.filter { it.value.color == Color.MAGICIAN  }[winningWizardIndex].key
+                        }
                         else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
                     }
 
@@ -406,7 +411,7 @@ enum class Rules(val options: List<String>) {
     @SerialName("Zauberer")
     MAGICIAN(
         listOf(
-            "Normal", "Letzter Zauberer"
+            "Normal", "Mittlerer Zauberer", "Letzter Zauberer"
         )
     ),
 

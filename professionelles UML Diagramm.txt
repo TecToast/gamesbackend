@@ -1,0 +1,11 @@
+erste Nachrichten (Winner, UpdateDoneStitches): winner (Winner), neuen Stichzahlen (UpdateDoneStitches), currentplayer=""
+- Serverdelay
+zweite Nachricht (ClearForNewSubRound, ShowChangeStitchModal(true)): Modal: leere layedCards, resetFirstCard, reset currentStitchWinner, ModalPopUp: ändere Stichzahl
+- warten auf userinput (ChangeStitchPrediction)
+    -> dritte Nachricht (ShowChangeStitchModal, StitchGoal): ShowChangeStitchModal(false), StitchGoal(broadcast), BackEndValidation ob Änderung okay
+vierte Nachricht: currentPlayer
+Evtl: Punkte anzeigen, neue Runde starten: neue Karten, neue Ansage, ...
+
+
+muss nicht eigtl. geprüft werden, ob eine bestimme Message überhaupt zum momentanen Zeitpunkt eingehen darf? z.B. Game.kt ab Zeile 401 (ChangeStitchPrediction):
+kann das nicht genutzt werden um Runde früher als erwartet zu beenden

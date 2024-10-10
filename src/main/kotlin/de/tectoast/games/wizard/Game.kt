@@ -52,6 +52,8 @@ class Game(val id: Int, val owner: String) {
         }
     }
 
+    var winnerGlobal: String? = null
+
     private fun checkRule(rule: Rules) = rules[rule] ?: rule.options.first()
 
     init {
@@ -121,7 +123,7 @@ class Game(val id: Int, val owner: String) {
         broadcast(EndGame(players.sortedByDescending { points[it]!! }.map { PlayerPoints(it, points[it]!!) }))
 
     suspend fun nextRound(nodelay: Boolean) {
-        delay(if (nodelay) 0 else 5000)
+        delay(if (nodelay) 0 else 800)
         if (++round * players.size > allCards.size) {
             endGame()
             return
@@ -146,7 +148,14 @@ class Game(val id: Int, val owner: String) {
     private val rnd = SecureRandom()
 
     //TODO for development and testing phase
-    val forcedCards = listOf<Card>()
+    val forcedCards = listOf<Card>(
+        NINEPOINTSEVENFIVE,
+        Card(Color.RED, 3f),
+        Card(Color.RED, 5f),
+        Card(Color.BLUE, 3f),
+        Card(Color.YELLOW, 5f),
+        SEVENPOINTFIVE
+    )
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>
@@ -181,10 +190,27 @@ class Game(val id: Int, val owner: String) {
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
      */
-    suspend fun newSubround(winner: String, wasBombUsed: Boolean) {
+    suspend fun afterSubRound(winner: String, wasBombUsed: Boolean) {
+        if (!wasBombUsed) {
+            stitchDone.add(winner, 1)
+            broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
+        }
+        val wasNinePointsSevenFiveUsed = layedCards.values.any { it.value == 9.75f }
+        winnerGlobal = winner
         layedCards.clear()
         firstCard = null
-        val winnerMessage = NewSubRound(winner.takeUnless { wasBombUsed }, winner)
+        broadcast(Winner(winner.takeUnless { wasBombUsed }))
+        delay(2000)
+        broadcast(ClearForNewSubRound)
+        if (wasNinePointsSevenFiveUsed) {
+            winner.send(ShowChangeStitchModal(true))
+            return
+        } else {
+            newSubround(winner)
+        }
+    }
+
+    suspend fun newSubround(winner: String) {
         if (cards[currentPlayer]!!.isEmpty()) {
             val results = buildMap {
                 players.forEach { p ->
@@ -200,14 +226,13 @@ class Game(val id: Int, val owner: String) {
             stitchDone.clear()
             isPredict = true
             broadcast(Results(results))
-            broadcast(winnerMessage)
             nextRound(false)
         } else {
             roundPlayers = players.toMutableList()
             while (roundPlayers.first() != winner) roundPlayers.add(roundPlayers.removeFirst())
             originalOrderForSubround = roundPlayers.toList()
             currentPlayer = roundPlayers.removeFirst()
-            broadcast(winnerMessage)
+            broadcast(CurrentPlayer(currentPlayer))
         }
     }
 
@@ -242,11 +267,7 @@ class Game(val id: Int, val owner: String) {
             }
             val wasBombUsed = layedCards.values.contains(BOMB)
 
-            if (!wasBombUsed) {
-                stitchDone.add(winner, 1)
-                broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
-            }
-            newSubround(winner, wasBombUsed)
+            afterSubRound(winner, wasBombUsed)
             return
         }
         broadcast(CurrentPlayer(currentPlayer))
@@ -381,6 +402,17 @@ class Game(val id: Int, val owner: String) {
 
             is LayCard -> {
                 layCard(username, msg)
+            }
+
+            is ChangeStitchPrediction -> {
+                //TODO prüfe ob (dieser) user überhaupt (zum jetzigen Zeitpunkt) Stich ändern darf
+                //TODO prüfe ob neue Stichzahl mindestens 0 und höchstens maximal-mögliche Stichzahl ist
+                if (abs(msg.value) == 1) {
+                    socket.sendWS(ShowChangeStitchModal(false))
+                    val newPrediction = stitchGoals.add(username, msg.value)!!
+                    broadcast(StitchGoal(username, newPrediction))
+                    newSubround(username)
+                }
             }
 
             else -> {

@@ -3,6 +3,7 @@ package de.tectoast.games.wizard.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+@Serializable
 enum class Color(val text: String, val isNormalColor: Boolean = false) {
     @SerialName("Rot")
     RED("Rot", true),

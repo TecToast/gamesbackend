@@ -17,6 +17,7 @@ class Game(val id: Int, val owner: String) {
     val stitchGoals = mutableMapOf<String, Int>()
     val stitchDone = mutableMapOf<String, Int>()
     val points = mutableMapOf<String, Int>()
+    val specialRoles = mutableMapOf<SpecialRole, String>()
     val cards = mutableMapOf<String, MutableList<Card>>()
     val layedCards = mutableMapOf<String, Card>()
     var firstCard: Card? = null
@@ -153,10 +154,50 @@ class Game(val id: Int, val owner: String) {
         cards.clear()
         forcedCards.forEach { stack.remove(it) }
         val mutableForced = forcedCards.toMutableList()
-        repeat(round) {
+
+        if (FunctionalSpecialRole.HEADFOOL in specialRoles.keys) {
+            val firstFool = stack.first { it.color == Color.FOOL }
+            stack.remove(firstFool)
+            cards.getOrPut(specialRoles[FunctionalSpecialRole.HEADFOOL].orEmpty()) { mutableListOf() }.add(firstFool)
+        }
+
+        if (FunctionalSpecialRole.SERVANT in specialRoles.keys) {
+            for (servantCard in stack.filter { it.value == 2 && it.color in setOf(Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE) }) {
+                if (cards.getOrPut(specialRoles[FunctionalSpecialRole.SERVANT]!!) { mutableListOf() }.size < round) {
+                    stack.remove(servantCard)
+                    cards.getValue(specialRoles[FunctionalSpecialRole.SERVANT]!!).add(servantCard)
+                } else break
+            }
+        }
+
+        var enoughCardsDealt = false
+        while (!enoughCardsDealt) {
+            enoughCardsDealt = true
             for (player in players) {
-                cards.getOrPut(player) { mutableListOf() }
-                    .add(mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD)
+                if (cards.getOrPut(player) { mutableListOf() }.size < round) {
+                    enoughCardsDealt = false
+                    val nextCard = mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD
+
+                    var cardStolen = false
+                    for (role in specialRoles.keys) {
+                        if (role is ColorPreferenceSpecialRole &&
+                            role.color == nextCard.color &&
+                            rnd.nextInt(role.chance) == 0 &&
+                            cards.getOrPut(specialRoles[role]!!) { mutableListOf() }.size < round) {
+
+                            cards.getValue(specialRoles[role]!!).add(nextCard)
+                            cardStolen = true
+                            break
+                        }
+                    }
+                    if (nextCard == BOMB && FunctionalSpecialRole.BLASTER in specialRoles.keys &&
+                        cards.getOrPut(specialRoles[FunctionalSpecialRole.BLASTER]!!) { mutableListOf() }.size < round) {
+                        cards.getValue(specialRoles[FunctionalSpecialRole.BLASTER]!!).add(nextCard)
+                        cardStolen = true
+                    }
+
+                    if (!cardStolen) cards.getOrPut(player) { mutableListOf() }.add(nextCard)
+                }
             }
         }
         val shifted = mutableMapOf<String, Int>()
@@ -186,16 +227,39 @@ class Game(val id: Int, val owner: String) {
         firstCard = null
         val winnerMessage = NewSubRound(winner.takeUnless { wasBombUsed }, winner)
         if (cards[currentPlayer]!!.isEmpty()) {
-            val results = buildMap {
-                players.forEach { p ->
-                    val amount =
-                        (if (stitchDone[p] == stitchGoals[p]) 20 + stitchDone[p]!! * 10 else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)).let {
-                            if (checkRule(Rules.POINTS) == "Max. 30") it.coerceAtMost(30) else it
+            var numberOfLoosingPlayers = 0
+            val results = mutableMapOf<String, Int>()
+            players.forEach { p ->
+                val amount =
+                    if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
+                        (if ((stitchDone[p] == stitchGoals[p]) && stitchDone[p] == 0) 50 else
+                                (if (stitchDone[p] == stitchGoals[p]) 20 + stitchDone[p]!! * 10 else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)).coerceAtMost(70))
+                    } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
+                        if (stitchDone[p] == stitchGoals[p]) {
+                            (if (stitchDone[p]!! <= 3) stitchDone[p]!! * 10 else 20 + stitchDone[p]!! * 10)
+                        } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
+                            5 * stitchDone[p]!!
+                        } else {
+                            -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
                         }
-                    addPoints(p, amount)
-                    put(p, amount)
+                    } else {
+                        (if (stitchDone[p] == stitchGoals[p]) 20 + stitchDone[p]!! * 10 else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!))
+                    }
+
+                if (amount < 0 && specialRoles[FunctionalSpecialRole.GLEEFUL] != p) {
+                    numberOfLoosingPlayers += 1
                 }
+                results[p] = amount
             }
+            if (FunctionalSpecialRole.GLEEFUL in specialRoles.keys) {
+                results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!] = results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!]!! + numberOfLoosingPlayers * 3
+            }
+
+            for (p in results.keys) {
+                if (checkRule(Rules.POINTS) == "Max. 30") results[p] = results[p]!!.coerceAtMost(30)
+                addPoints(p, results[p]!!)
+            }
+
             stitchGoals.clear()
             stitchDone.clear()
             isPredict = true
@@ -423,6 +487,36 @@ enum class Rules(val options: List<String>) {
 
     @SerialName("Spezialkarten")
     SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),
+}
+
+interface SpecialRole {}
+
+enum class FunctionalSpecialRole(val inGameName: String, val description: String) : SpecialRole{
+    BLASTER("Der Sprengmeister",
+        "Du bekommst immer die Bombe, falls sie im Spiel ist"),
+    HEADFOOL("Der Obernarr",
+        "Du bekommst immer den ersten Narren im Stapel, bevor normal ausgeteilt wird"),
+    SERVANT("Der Knecht",
+        "Du bekommts immer so viele Knechte/Mägde wie möglich, bevor normal ausgeteilt wird"),
+    GLEEFUL("Der Schadenfrohe",
+        "Du bekommst 3 Punkte jedes mal wenn ein anderer Spieler Minuspunkte bekommt"),
+    PESSIMIST("Der Pessimist",
+        "Du bekommst 50 Punkte wenn du korrekt angesagt 0 Stiche machst, kannst dafür aber maximal 70 Punkte pro Runde machen"),
+    OPTIMIST("Der Optimist",
+        "Du bekommts 5 Punkte pro gemachtem Stich wenn du eins neben deiner Vorhersage liegts, dafür aber nur 5, 15, 25 bzw. 35 Punkte für 0 bis 3 Stiche")
+}
+
+enum class ColorPreferenceSpecialRole(val inGameName: String, val description: String, val color: Color, val chance: Int) : SpecialRole {
+    WIZARDMASTER("Der Zaubermeister",
+        "Du hast jedes mal wenn ein anderer einen Zauberer ausgetetilt bekommt eine 1/4 Chance ihn zu stehlen.", Color.MAGICIAN, 4),
+    REDSHEEP("Das rote Schaf",
+        "Du hast jedes mal wenn ein anderer eine rote Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.RED, 2),
+    YELLOWSHEEP("Das gelbe Schaf",
+        "Du hast jedes mal wenn ein anderer eine gelbe Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.YELLOW, 2),
+    GREENSHEEP("Das grüne Schaf",
+        "Du hast jedes mal wenn ein anderer eine grüne Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.GREEN, 2),
+    BLUESHEEP("Das blaue Schaf",
+        "Du hast jedes mal wenn ein anderer eine blaue Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.BLUE, 2)
 }
 
 enum class GamePhase {

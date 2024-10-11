@@ -52,7 +52,7 @@ class Game(val id: Int, val owner: String) {
         }
     }
 
-    var winnerGlobal: String? = null
+    var userToChangeStitchPrediction: String? = null
 
     private fun checkRule(rule: Rules) = rules[rule] ?: rule.options.first()
 
@@ -123,7 +123,7 @@ class Game(val id: Int, val owner: String) {
         broadcast(EndGame(players.sortedByDescending { points[it]!! }.map { PlayerPoints(it, points[it]!!) }))
 
     suspend fun nextRound(nodelay: Boolean) {
-        delay(if (nodelay) 0 else 800)
+        delay(if (nodelay) 0 else 1000)
         if (++round * players.size > allCards.size) {
             endGame()
             return
@@ -148,14 +148,7 @@ class Game(val id: Int, val owner: String) {
     private val rnd = SecureRandom()
 
     //TODO for development and testing phase
-    val forcedCards = listOf<Card>(
-        NINEPOINTSEVENFIVE,
-        Card(Color.RED, 3f),
-        Card(Color.RED, 5f),
-        Card(Color.BLUE, 3f),
-        Card(Color.YELLOW, 5f),
-        SEVENPOINTFIVE
-    )
+    val forcedCards = listOf<Card>()
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>
@@ -196,13 +189,15 @@ class Game(val id: Int, val owner: String) {
             broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
         }
         val wasNinePointsSevenFiveUsed = layedCards.values.any { it.value == 9.75f }
-        winnerGlobal = winner
+        if (wasNinePointsSevenFiveUsed) {
+            userToChangeStitchPrediction = winner
+        }
         layedCards.clear()
         firstCard = null
         broadcast(Winner(winner.takeUnless { wasBombUsed }))
-        delay(2000)
+        delay(3300)
         broadcast(ClearForNewSubRound)
-        if (wasNinePointsSevenFiveUsed) {
+        if (wasNinePointsSevenFiveUsed && !wasBombUsed) {
             winner.send(ShowChangeStitchModal(true))
             return
         } else {
@@ -361,6 +356,7 @@ class Game(val id: Int, val owner: String) {
 
             is LeaveGame -> {
                 // TODO: Check which phase and probably change owner etc (or delete the game)
+                // TODO: if all users left: delete room
                 when (phase) {
                     GamePhase.LOBBY -> {
                         if (username == owner) {
@@ -405,14 +401,15 @@ class Game(val id: Int, val owner: String) {
             }
 
             is ChangeStitchPrediction -> {
-                //TODO prüfe ob (dieser) user überhaupt (zum jetzigen Zeitpunkt) Stich ändern darf
-                //TODO prüfe ob neue Stichzahl mindestens 0 und höchstens maximal-mögliche Stichzahl ist
-                if (abs(msg.value) == 1) {
-                    socket.sendWS(ShowChangeStitchModal(false))
-                    val newPrediction = stitchGoals.add(username, msg.value)!!
-                    broadcast(StitchGoal(username, newPrediction))
-                    newSubround(username)
-                }
+                if (username != userToChangeStitchPrediction) return
+                if (abs(msg.value) != 1) return
+                if (stitchGoals[username]!! + msg.value !in 0..round) return
+                socket.sendWS(ShowChangeStitchModal(false))
+                delay(200)
+                val newPrediction = stitchGoals.add(username, msg.value)!!
+                userToChangeStitchPrediction = ""
+                broadcast(StitchGoal(username, newPrediction))
+                newSubround(username)
             }
 
             else -> {
@@ -430,7 +427,6 @@ class Game(val id: Int, val owner: String) {
         val specialCards = setOf(BOMB, SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
         val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
     }
-
 }
 
 @Serializable

@@ -503,7 +503,7 @@ enum class FunctionalSpecialRole(val inGameName: String, val description: String
     PESSIMIST("Der Pessimist",
         "Du bekommst 50 Punkte wenn du korrekt angesagt 0 Stiche machst, kannst dafür aber maximal 70 Punkte pro Runde machen"),
     OPTIMIST("Der Optimist",
-        "Du bekommts 5 Punkte pro gemachtem Stich wenn du eins neben deiner Vorhersage liegts, dafür aber nur 5, 15, 25 bzw. 35 Punkte für 0 bis 3 Stiche")
+        "Du bekommts 5 Punkte pro gemachtem Stich wenn du eins neben deiner Vorhersage liegts, dafür aber nur 0, 10, 20 bzw. 30 Punkte für 0 bis 3 Stiche")
 }
 
 enum class ColorPreferenceSpecialRole(val inGameName: String, val description: String, val color: Color, val chance: Int) : SpecialRole {

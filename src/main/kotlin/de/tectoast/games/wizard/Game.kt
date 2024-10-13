@@ -424,7 +424,7 @@ class Game(val id: Int, val owner: String) {
     suspend fun handleMessage(socket: WebSocketServerSession, msg: WSMessage, username: String) {
         when (msg) {
             is StartButtonClicked -> {
-                if (username == owner) {
+                if (phase == GamePhase.LOBBY && username == owner) {
                     if (checkRule(Rules.SPECIALROLES) == "Freie Auswahl") {
                         if (specialRoles.isEmpty()) {
                             phase = GamePhase.ROLESELECTION

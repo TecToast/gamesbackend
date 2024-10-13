@@ -23,6 +23,7 @@ class Game(val id: Int, val owner: String) {
     var firstCard: Card? = null
     var trump: Card = NOTHINGCARD
     var players = mutableSetOf<String>()
+    var playersRemainingForRoleSelection = mutableListOf<String>()
     var phase = GamePhase.LOBBY
     var currentPlayer = "Ofl"
     var roundPlayers = mutableListOf<String>()
@@ -158,7 +159,7 @@ class Game(val id: Int, val owner: String) {
         if (FunctionalSpecialRole.HEADFOOL in specialRoles.keys) {
             val firstFool = stack.first { it.color == Color.FOOL }
             stack.remove(firstFool)
-            cards.getOrPut(specialRoles[FunctionalSpecialRole.HEADFOOL].orEmpty()) { mutableListOf() }.add(firstFool)
+            cards.getOrPut(specialRoles[FunctionalSpecialRole.HEADFOOL]!!) { mutableListOf() }.add(firstFool)
         }
 
         if (FunctionalSpecialRole.SERVANT in specialRoles.keys) {
@@ -361,12 +362,26 @@ class Game(val id: Int, val owner: String) {
         nextPlayer()
     }
 
+    suspend fun broadcastRoleChoices() {
+        broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName}))
+    }
+
+    suspend fun allowNextPlayerToPickRole() {
+        val nextPlayer = playersRemainingForRoleSelection.first()
+        broadcastRoleChoices()
+        broadcast(CurrentRoleSelectingPlayer(nextPlayer))
+    }
+
+    fun getSpecialRoleFromInGameName(inGameName: String) : SpecialRole? =
+        (FunctionalSpecialRole.entries + ColorPreferenceSpecialRole.entries).firstOrNull { it.inGameName == inGameName }
+
     suspend fun start() {
-        if (phase != GamePhase.LOBBY) return
+        if (phase !in setOf( GamePhase.LOBBY, GamePhase.ROLESELECTION)) return
         players = players.shuffled().toMutableSet()
         players.forEach { points[it] = 0 }
         phase = GamePhase.RUNNING
         broadcast(GameStarted(players))
+        broadcastRoleChoices()
         nextRound(true)
     }
 
@@ -401,9 +416,39 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun handleMessage(socket: WebSocketServerSession, msg: WSMessage, username: String) {
         when (msg) {
-            is StartGame -> {
+            is StartButtonClicked -> {
                 if (username == owner) {
-                    start()
+                    if (checkRule(Rules.SPECIALROLES) == "Freie Auswahl") {
+                        if (specialRoles.isEmpty()) {
+                            phase = GamePhase.ROLESELECTION
+                            playersRemainingForRoleSelection = players.shuffled().toMutableList()
+                            allowNextPlayerToPickRole()
+                        }
+                    } else if (checkRule(Rules.SPECIALROLES) == "Vorgegeben") {
+                        val allRoles = (ColorPreferenceSpecialRole.entries + FunctionalSpecialRole.entries).shuffled().toMutableList()
+                        for (player in players) {
+                            specialRoles[allRoles.removeFirst()] = player
+                        }
+                        start()
+                    } else {
+                        start()
+                    }
+                }
+            }
+
+            is RequestSelectedRole -> {
+                if (username == playersRemainingForRoleSelection.firstOrNull()) {
+                    val requestedRole = getSpecialRoleFromInGameName(msg.roleName)
+                    if (requestedRole != null && requestedRole !in specialRoles.keys) {
+                        specialRoles[requestedRole] = username
+                        playersRemainingForRoleSelection.removeFirst()
+                        if (playersRemainingForRoleSelection.isEmpty()) {
+                            broadcast(CurrentRoleSelectingPlayer(""))
+                            start()
+                        } else {
+                            allowNextPlayerToPickRole()
+                        }
+                    }
                 }
             }
 
@@ -418,7 +463,7 @@ class Game(val id: Int, val owner: String) {
                         socket.sendWS(RedirectHome)
                     }
 
-                    GamePhase.RUNNING -> {
+                    GamePhase.RUNNING, GamePhase.ROLESELECTION -> {
                         endGame()
                         phase = GamePhase.FINISHED
                     }
@@ -487,38 +532,30 @@ enum class Rules(val options: List<String>) {
 
     @SerialName("Spezialkarten")
     SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),
+
+    @SerialName("Spezialrollen")
+    SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben")),
 }
 
-interface SpecialRole {}
+interface SpecialRole {val inGameName: String}
 
-enum class FunctionalSpecialRole(val inGameName: String, val description: String) : SpecialRole{
-    BLASTER("Der Sprengmeister",
-        "Du bekommst immer die Bombe, falls sie im Spiel ist"),
-    HEADFOOL("Der Obernarr",
-        "Du bekommst immer den ersten Narren im Stapel, bevor normal ausgeteilt wird"),
-    SERVANT("Der Knecht",
-        "Du bekommts immer so viele Knechte/Mägde wie möglich, bevor normal ausgeteilt wird"),
-    GLEEFUL("Der Schadenfrohe",
-        "Du bekommst 3 Punkte jedes mal wenn ein anderer Spieler Minuspunkte bekommt"),
-    PESSIMIST("Der Pessimist",
-        "Du bekommst 50 Punkte wenn du korrekt angesagt 0 Stiche machst, kannst dafür aber maximal 70 Punkte pro Runde machen"),
-    OPTIMIST("Der Optimist",
-        "Du bekommts 5 Punkte pro gemachtem Stich wenn du eins neben deiner Vorhersage liegts, dafür aber nur 0, 10, 20 bzw. 30 Punkte für 0 bis 3 Stiche")
+enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole{
+    BLASTER("Der Sprengmeister"),
+    HEADFOOL("Der Obernarr"),
+    SERVANT("Der Knecht"),
+    GLEEFUL("Der Schadenfrohe"),
+    PESSIMIST("Der Pessimist"),
+    OPTIMIST("Der Optimist")
 }
 
-enum class ColorPreferenceSpecialRole(val inGameName: String, val description: String, val color: Color, val chance: Int) : SpecialRole {
-    WIZARDMASTER("Der Zaubermeister",
-        "Du hast jedes mal wenn ein anderer einen Zauberer ausgetetilt bekommt eine 1/4 Chance ihn zu stehlen.", Color.MAGICIAN, 4),
-    REDSHEEP("Das rote Schaf",
-        "Du hast jedes mal wenn ein anderer eine rote Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.RED, 2),
-    YELLOWSHEEP("Das gelbe Schaf",
-        "Du hast jedes mal wenn ein anderer eine gelbe Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.YELLOW, 2),
-    GREENSHEEP("Das grüne Schaf",
-        "Du hast jedes mal wenn ein anderer eine grüne Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.GREEN, 2),
-    BLUESHEEP("Das blaue Schaf",
-        "Du hast jedes mal wenn ein anderer eine blaue Karte ausgetetilt bekommt eine 1/2 Chance sie zu stehlen.", Color.BLUE, 2)
+enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) : SpecialRole {
+    WIZARDMASTER("Der Zaubermeister", Color.MAGICIAN, 4),
+    REDSHEEP("Das rote Schaf", Color.RED, 2),
+    YELLOWSHEEP("Das gelbe Schaf", Color.YELLOW, 2),
+    GREENSHEEP("Das grüne Schaf", Color.GREEN, 2),
+    BLUESHEEP("Das blaue Schaf", Color.BLUE, 2)
 }
 
 enum class GamePhase {
-    LOBBY, RUNNING, FINISHED
+    LOBBY, ROLESELECTION, RUNNING, FINISHED
 }

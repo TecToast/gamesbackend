@@ -148,7 +148,19 @@ class Game(val id: Int, val owner: String) {
     private val rnd = SecureRandom()
 
     //TODO for development and testing phase
-    val forcedCards = listOf<Card>()
+    val forcedCards = listOf<Card>(
+        Card(Color.FOOL, 1f),
+        Card(Color.FOOL, 2f),
+        Card(Color.FOOL, 3f),
+        Card(Color.FOOL, 4f),
+        FAIRY,
+        Card(Color.RED, 4f),
+        DRAGON,
+        Card(Color.BLUE, 4f),
+        BOMB,
+        Card(Color.MAGICIAN, 1f),
+        Card(Color.MAGICIAN, 2f)
+    )
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>
@@ -242,7 +254,19 @@ class Game(val id: Int, val owner: String) {
             }
             val firstPlayerOfRound = originalOrderForSubround[0]
             val winner = when {
+                layedCards.values.containsAll(
+                    listOf(
+                        FAIRY,
+                        DRAGON
+                    )
+                ) -> layedCards.entries.find { it.value == FAIRY }!!.key
+
+                layedCards.values.contains(DRAGON) -> layedCards.entries.find { it.value == DRAGON }!!.key
+                layedCards.entries.filter { it.value != FAIRY }
+                    .all { it.value.color == Color.FOOL } -> layedCards.entries.first { it.value.color == Color.FOOL }.key
+
                 layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
+
                 layedCards.values.any { it.color == Color.MAGICIAN } -> {
                     if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
                     else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
@@ -272,6 +296,8 @@ class Game(val id: Int, val owner: String) {
      * @return true if the card is higher than the first card or trump
      */
     fun Card.isHigherThan(highestCardUntilNow: Card): Boolean {
+        if (this.color == Color.Special && this.value == 2f) return false
+        if (this.color == Color.Special && this.value == 3f) return true
         if (this.color == Color.FOOL) return false
         if (highestCardUntilNow == BOMB) return true
         if (highestCardUntilNow.color == Color.FOOL) return true
@@ -296,11 +322,17 @@ class Game(val id: Int, val owner: String) {
             realCard.copy(color = it)
         } ?: realCard
         firstCard?.let { fc ->
-            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || realCard in specialCards || fc.color == Color.MAGICIAN || fc == BOMB) return@let
-            if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
+            if (card.color !in setOf(
+                    Color.FOOL,
+                    Color.MAGICIAN,
+                    Color.Special
+                ) && fc.color != card.color && fc.color != Color.MAGICIAN && fc != DRAGON && playerCards.any { it.color == fc.color }
+            ) return
         }
-        if (layedCards.values.all { it.color == Color.FOOL }) {
-            firstCard = card
+        if (layedCards.values.all { it.color in setOf(Color.FOOL, Color.Special) }) {
+            if (card == DRAGON || card.color != Color.Special && card.color != Color.FOOL) {
+                firstCard = card
+            }
         }
         layedCards[name] = card
         playerCards.remove(realCard)
@@ -423,8 +455,9 @@ class Game(val id: Int, val owner: String) {
         val BOMB = Card(Color.Special, 1f)
         val SEVENPOINTFIVE = Card(Color.Special, 7.5f)
         val NINEPOINTSEVENFIVE = Card(Color.Special, 9.75f)
+        val FAIRY = Card(Color.Special, 2f)
+        val DRAGON = Card(Color.Special, 3f)
         val logger = KotlinLogging.logger {}
-        val specialCards = setOf(BOMB, SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
         val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
     }
 }

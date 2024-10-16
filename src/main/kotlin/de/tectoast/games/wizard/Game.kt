@@ -253,7 +253,7 @@ class Game(val id: Int, val owner: String) {
                 results[p] = amount
             }
             if (FunctionalSpecialRole.GLEEFUL in specialRoles.keys) {
-                results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!] = results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!]!! + numberOfLoosingPlayers * 3
+                results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!] = results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!]!! + numberOfLoosingPlayers * 5
             }
 
             for (p in results.keys) {

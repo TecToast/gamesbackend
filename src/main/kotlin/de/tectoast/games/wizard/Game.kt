@@ -363,7 +363,11 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun broadcastRoleChoices() {
-        broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName}))
+        if (checkRule(Rules.SPECIALROLES) == "Geheim") {
+            for (player in players) {
+                player.send(SelectedRoles(specialRoles.entries.associate { if (it.value == player) it.value to it.key.inGameName else it.value to "???"}))
+            }
+        } else broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName}))
     }
 
     suspend fun allowNextPlayerToPickRole() {
@@ -424,7 +428,7 @@ class Game(val id: Int, val owner: String) {
                             playersRemainingForRoleSelection = players.shuffled().toMutableList()
                             allowNextPlayerToPickRole()
                         }
-                    } else if (checkRule(Rules.SPECIALROLES) == "Vorgegeben") {
+                    } else if (checkRule(Rules.SPECIALROLES) in setOf("Vorgegeben", "Geheim") ) {
                         val allRoles = (ColorPreferenceSpecialRole.entries + FunctionalSpecialRole.entries).shuffled().toMutableList()
                         for (player in players) {
                             specialRoles[allRoles.removeFirst()] = player
@@ -534,7 +538,7 @@ enum class Rules(val options: List<String>) {
     SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),
 
     @SerialName("Spezialrollen")
-    SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben")),
+    SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben", "Geheim")),
 }
 
 interface SpecialRole {val inGameName: String}

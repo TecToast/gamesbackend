@@ -152,21 +152,24 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>
-        cards.clear()
+        players.forEach { cards[it] = mutableListOf() }
         forcedCards.forEach { stack.remove(it) }
         val mutableForced = forcedCards.toMutableList()
-
-        if (FunctionalSpecialRole.HEADFOOL in specialRoles.keys) {
+        specialRoles[FunctionalSpecialRole.HEADFOOL]?.let { user ->
             val firstFool = stack.first { it.color == Color.FOOL }
             stack.remove(firstFool)
-            cards.getOrPut(specialRoles[FunctionalSpecialRole.HEADFOOL]!!) { mutableListOf() }.add(firstFool)
+            cards.getValue(user).add(firstFool)
         }
-
-        if (FunctionalSpecialRole.SERVANT in specialRoles.keys) {
-            for (servantCard in stack.filter { it.value == 2 && it.color in setOf(Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE) }) {
-                if (cards.getOrPut(specialRoles[FunctionalSpecialRole.SERVANT]!!) { mutableListOf() }.size < round) {
+        specialRoles[FunctionalSpecialRole.SERVANT]?.let { user ->
+            val playerCards = cards.getValue(user)
+            for (servantCard in stack.filter {
+                it.value == 2 && it.color in setOf(
+                    Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE
+                )
+            }) {
+                if (playerCards.size < round) {
                     stack.remove(servantCard)
-                    cards.getValue(specialRoles[FunctionalSpecialRole.SERVANT]!!).add(servantCard)
+                    playerCards.add(servantCard)
                 } else break
             }
         }
@@ -175,26 +178,25 @@ class Game(val id: Int, val owner: String) {
         while (!enoughCardsDealt) {
             enoughCardsDealt = true
             for (player in players) {
-                if (cards.getOrPut(player) { mutableListOf() }.size < round) {
+                if (cards.getValue(player).size < round) {
                     enoughCardsDealt = false
                     val nextCard = mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD
 
                     var cardStolen = false
-                    for (role in specialRoles.keys) {
-                        if (role is ColorPreferenceSpecialRole &&
-                            role.color == nextCard.color &&
-                            rnd.nextInt(role.chance) == 0 &&
-                            cards.getOrPut(specialRoles[role]!!) { mutableListOf() }.size < round) {
-
-                            cards.getValue(specialRoles[role]!!).add(nextCard)
+                    specialRoles.entries.firstOrNull { (it.key as? ColorPreferenceSpecialRole)?.color == nextCard.color }
+                        ?.takeIf {
+                            cards.getValue(it.value).size < round && rnd.nextInt((it.key as ColorPreferenceSpecialRole).chance) == 0
+                        }?.let {
+                            cards.getValue(it.value).add(nextCard)
                             cardStolen = true
-                            break
                         }
-                    }
-                    if (nextCard == BOMB && FunctionalSpecialRole.BLASTER in specialRoles.keys &&
-                        cards.getOrPut(specialRoles[FunctionalSpecialRole.BLASTER]!!) { mutableListOf() }.size < round) {
-                        cards.getValue(specialRoles[FunctionalSpecialRole.BLASTER]!!).add(nextCard)
-                        cardStolen = true
+                    if (nextCard == BOMB) {
+                        specialRoles[FunctionalSpecialRole.BLASTER]?.let { blaster ->
+                            if (cards.getValue(blaster).size < round) {
+                                cards.getValue(blaster).add(nextCard)
+                                cardStolen = true
+                            }
+                        }
                     }
 
                     if (!cardStolen) cards.getOrPut(player) { mutableListOf() }.add(nextCard)
@@ -220,6 +222,11 @@ class Game(val id: Int, val owner: String) {
         }
     }
 
+    fun String.normalPointCalculation() =
+        (if (stitchDone[this] == stitchGoals[this]) 20 + stitchDone[this]!! * 10 else -10 * abs(stitchDone[this]!! - stitchGoals[this]!!))
+
+    fun String.predictedCorrectly() = stitchDone[this] == stitchGoals[this]
+
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
      */
@@ -233,18 +240,18 @@ class Game(val id: Int, val owner: String) {
             players.forEach { p ->
                 val amount =
                     if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
-                        (if ((stitchDone[p] == stitchGoals[p]) && stitchDone[p] == 0) 50 else
-                                (if (stitchDone[p] == stitchGoals[p]) 20 + stitchDone[p]!! * 10 else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)).coerceAtMost(70))
+                        if (p.predictedCorrectly() && stitchDone[p] == 0) 50
+                        else p.normalPointCalculation().coerceAtMost(70)
                     } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
-                        if (stitchDone[p] == stitchGoals[p]) {
-                            (if (stitchDone[p]!! <= 3) stitchDone[p]!! * 10 else 20 + stitchDone[p]!! * 10)
+                        if (p.predictedCorrectly()) {
+                            stitchDone[p]!! * 10 + if (stitchDone[p]!! <= 3) 0 else 20
                         } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
                             5 * stitchDone[p]!!
                         } else {
                             -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
                         }
                     } else {
-                        (if (stitchDone[p] == stitchGoals[p]) 20 + stitchDone[p]!! * 10 else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!))
+                        p.normalPointCalculation()
                     }
 
                 if (amount < 0 && specialRoles[FunctionalSpecialRole.GLEEFUL] != p) {
@@ -252,8 +259,8 @@ class Game(val id: Int, val owner: String) {
                 }
                 results[p] = amount
             }
-            if (FunctionalSpecialRole.GLEEFUL in specialRoles.keys) {
-                results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!] = results[specialRoles[FunctionalSpecialRole.GLEEFUL]!!]!! + numberOfLoosingPlayers * 5
+            specialRoles[FunctionalSpecialRole.GLEEFUL]?.let { gleeful ->
+                results.add(gleeful, numberOfLoosingPlayers * 5)
             }
 
             for (p in results.keys) {
@@ -376,11 +383,11 @@ class Game(val id: Int, val owner: String) {
         broadcast(CurrentRoleSelectingPlayer(nextPlayer))
     }
 
-    fun getSpecialRoleFromInGameName(inGameName: String) : SpecialRole? =
+    fun getSpecialRoleFromInGameName(inGameName: String): SpecialRole? =
         (FunctionalSpecialRole.entries + ColorPreferenceSpecialRole.entries).firstOrNull { it.inGameName == inGameName }
 
     suspend fun start() {
-        if (phase !in setOf( GamePhase.LOBBY, GamePhase.ROLESELECTION)) return
+        if (phase !in setOf(GamePhase.LOBBY, GamePhase.ROLESELECTION)) return
         players = players.shuffled().toMutableSet()
         players.forEach { points[it] = 0 }
         phase = GamePhase.RUNNING
@@ -421,15 +428,16 @@ class Game(val id: Int, val owner: String) {
     suspend fun handleMessage(socket: WebSocketServerSession, msg: WSMessage, username: String) {
         when (msg) {
             is StartButtonClicked -> {
-                if (username == owner) {
+                if (phase == GamePhase.LOBBY && username == owner) {
                     if (checkRule(Rules.SPECIALROLES) == "Freie Auswahl") {
                         if (specialRoles.isEmpty()) {
                             phase = GamePhase.ROLESELECTION
                             playersRemainingForRoleSelection = players.shuffled().toMutableList()
                             allowNextPlayerToPickRole()
                         }
-                    } else if (checkRule(Rules.SPECIALROLES) in setOf("Vorgegeben", "Geheim") ) {
-                        val allRoles = (ColorPreferenceSpecialRole.entries + FunctionalSpecialRole.entries).shuffled().toMutableList()
+                    } else if (checkRule(Rules.SPECIALROLES) in setOf("Vorgegeben", "Geheim")) {
+                        val allRoles = (ColorPreferenceSpecialRole.entries + FunctionalSpecialRole.entries).shuffled()
+                            .toMutableList()
                         for (player in players) {
                             specialRoles[allRoles.removeFirst()] = player
                         }
@@ -541,22 +549,29 @@ enum class Rules(val options: List<String>) {
     SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben", "Geheim")),
 }
 
-interface SpecialRole {val inGameName: String}
+interface SpecialRole {
+    val inGameName: String
+}
 
-enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole{
-    BLASTER("Der Sprengmeister"),
-    HEADFOOL("Der Obernarr"),
-    SERVANT("Der Knecht"),
-    GLEEFUL("Der Schadenfrohe"),
-    PESSIMIST("Der Pessimist"),
+enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole {
+    BLASTER("Der Sprengmeister"), HEADFOOL("Der Obernarr"), SERVANT("Der Knecht"), GLEEFUL("Der Schadenfrohe"), PESSIMIST(
+        "Der Pessimist"
+    ),
     OPTIMIST("Der Optimist")
 }
 
-enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) : SpecialRole {
-    WIZARDMASTER("Der Zaubermeister", Color.MAGICIAN, 4),
-    REDSHEEP("Das rote Schaf", Color.RED, 2),
-    YELLOWSHEEP("Das gelbe Schaf", Color.YELLOW, 2),
-    GREENSHEEP("Das grüne Schaf", Color.GREEN, 2),
+enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) :
+    SpecialRole {
+    WIZARDMASTER("Der Zaubermeister", Color.MAGICIAN, 4), REDSHEEP(
+        "Das rote Schaf",
+        Color.RED,
+        2
+    ),
+    YELLOWSHEEP("Das gelbe Schaf", Color.YELLOW, 2), GREENSHEEP(
+        "Das grüne Schaf",
+        Color.GREEN,
+        2
+    ),
     BLUESHEEP("Das blaue Schaf", Color.BLUE, 2)
 }
 

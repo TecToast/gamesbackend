@@ -239,7 +239,10 @@ class Game(val id: Int, val owner: String) {
             val results = mutableMapOf<String, Int>()
             players.forEach { p ->
                 val amount =
-                    if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
+                    if (specialRoles[FunctionalSpecialRole.GAMBLER] == p) {
+                        if (p.predictedCorrectly()) stitchDone[p]!! * 20
+                        else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
+                    } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
                         if (p.predictedCorrectly() && stitchDone[p] == 0) 50
                         else p.normalPointCalculation().coerceAtMost(70)
                     } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
@@ -557,7 +560,8 @@ enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole 
     BLASTER("Der Sprengmeister"), HEADFOOL("Der Obernarr"), SERVANT("Der Knecht"), GLEEFUL("Der Schadenfrohe"), PESSIMIST(
         "Der Pessimist"
     ),
-    OPTIMIST("Der Optimist")
+    OPTIMIST("Der Optimist"),
+    GAMBLER("Der Gambler")
 }
 
 enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) :

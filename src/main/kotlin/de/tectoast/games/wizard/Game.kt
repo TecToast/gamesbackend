@@ -17,11 +17,13 @@ class Game(val id: Int, val owner: String) {
     val stitchGoals = mutableMapOf<String, Int>()
     val stitchDone = mutableMapOf<String, Int>()
     val points = mutableMapOf<String, Int>()
+    val specialRoles = mutableMapOf<SpecialRole, String>()
     val cards = mutableMapOf<String, MutableList<Card>>()
     val layedCards = mutableMapOf<String, Card>()
     var firstCard: Card? = null
     var trump: Card = NOTHINGCARD
     var players = mutableSetOf<String>()
+    var playersRemainingForRoleSelection = mutableListOf<String>()
     var phase = GamePhase.LOBBY
     var currentPlayer = "Ofl"
     var roundPlayers = mutableListOf<String>()
@@ -154,13 +156,54 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>
-        cards.clear()
+        players.forEach { cards[it] = mutableListOf() }
         forcedCards.forEach { stack.remove(it) }
         val mutableForced = forcedCards.toMutableList()
-        repeat(round) {
+        specialRoles[FunctionalSpecialRole.HEADFOOL]?.let { user ->
+            val firstFool = stack.first { it.color == Color.FOOL }
+            stack.remove(firstFool)
+            cards.getValue(user).add(firstFool)
+        }
+        specialRoles[FunctionalSpecialRole.SERVANT]?.let { user ->
+            val playerCards = cards.getValue(user)
+            for (servantCard in stack.filter {
+                it.value == 2 && it.color in setOf(
+                    Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE
+                )
+            }) {
+                if (playerCards.size < round) {
+                    stack.remove(servantCard)
+                    playerCards.add(servantCard)
+                } else break
+            }
+        }
+
+        var enoughCardsDealt = false
+        while (!enoughCardsDealt) {
+            enoughCardsDealt = true
             for (player in players) {
-                cards.getOrPut(player) { mutableListOf() }
-                    .add(mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD)
+                if (cards.getValue(player).size < round) {
+                    enoughCardsDealt = false
+                    val nextCard = mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD
+                    var cardStolen = false
+                    specialRoles.entries.firstOrNull { (it.key as? ColorPreferenceSpecialRole)?.color == nextCard.color }
+                        ?.takeIf {
+                            cards.getValue(it.value).size < round && rnd.nextInt((it.key as ColorPreferenceSpecialRole).chance) == 0
+                        }?.let {
+                            cards.getValue(it.value).add(nextCard)
+                            cardStolen = true
+                        }
+                    if (nextCard == BOMB) {
+                        specialRoles[FunctionalSpecialRole.BLASTER]?.let { blaster ->
+                            if (cards.getValue(blaster).size < round) {
+                                cards.getValue(blaster).add(nextCard)
+                                cardStolen = true
+                            }
+                        }
+                    }
+
+                    if (!cardStolen) cards.getOrPut(player) { mutableListOf() }.add(nextCard)
+                }
             }
         }
         val shifted = mutableMapOf<String, Int>()
@@ -181,6 +224,11 @@ class Game(val id: Int, val owner: String) {
             }
         }
     }
+
+    fun String.normalPointCalculation() =
+        (if (stitchDone[this] == stitchGoals[this]) 20 + stitchDone[this]!! * 10 else -10 * abs(stitchDone[this]!! - stitchGoals[this]!!))
+
+    fun String.predictedCorrectly() = stitchDone[this] == stitchGoals[this]
 
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
@@ -215,16 +263,39 @@ class Game(val id: Int, val owner: String) {
     suspend fun newSubround() {
         cardsToChange.clear()
         if (cards[currentPlayer]!!.isEmpty()) {
-            val results = buildMap {
-                players.forEach { p ->
-                    val amount =
-                        (if (stitchDone[p] == stitchGoals[p]) 20 + stitchDone[p]!! * 10 else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)).let {
-                            if (checkRule(Rules.POINTS) == "Max. 30") it.coerceAtMost(30) else it
+            var numberOfLoosingPlayers = 0
+            val results = mutableMapOf<String, Int>()
+            players.forEach { p ->
+                val amount =
+                    if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
+                        if (p.predictedCorrectly() && stitchDone[p] == 0) 50
+                        else p.normalPointCalculation().coerceAtMost(70)
+                    } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
+                        if (p.predictedCorrectly()) {
+                            stitchDone[p]!! * 10 + if (stitchDone[p]!! <= 3) 0 else 20
+                        } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
+                            5 * stitchDone[p]!!
+                        } else {
+                            -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
                         }
-                    addPoints(p, amount)
-                    put(p, amount)
+                    } else {
+                        p.normalPointCalculation()
+                    }
+
+                if (amount < 0 && specialRoles[FunctionalSpecialRole.GLEEFUL] != p) {
+                    numberOfLoosingPlayers += 1
                 }
+                results[p] = amount
             }
+            specialRoles[FunctionalSpecialRole.GLEEFUL]?.let { gleeful ->
+                results.add(gleeful, numberOfLoosingPlayers * 3)
+            }
+
+            for (p in results.keys) {
+                if (checkRule(Rules.POINTS) == "Max. 30") results[p] = results[p]!!.coerceAtMost(30)
+                addPoints(p, results[p]!!)
+            }
+
             stitchGoals.clear()
             stitchDone.clear()
             isPredict = true
@@ -263,8 +334,13 @@ class Game(val id: Int, val owner: String) {
                     .all { it.value.color == Color.FOOL } -> layedCards.entries.first { it.value.color == Color.FOOL }.key
 
                 layedCards.values.any { it.color == Color.MAGICIAN } -> {
-                    if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
-                    else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
+                        if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
+                        else if (checkRule(Rules.MAGICIAN) == "Mittlerer Zauberer") {
+                            val numberOfWizards = layedCards.entries.count { it.value.color == Color.MAGICIAN }
+                            val winningWizardIndex = (numberOfWizards - 1) / 2
+                            layedCards.entries.filter { it.value.color == Color.MAGICIAN  }[winningWizardIndex].key
+                        }
+                        else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
                 }
                 else -> {
                     var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
@@ -334,12 +410,26 @@ class Game(val id: Int, val owner: String) {
         nextPlayer()
     }
 
+    suspend fun broadcastRoleChoices() {
+        broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName }))
+    }
+
+    suspend fun allowNextPlayerToPickRole() {
+        val nextPlayer = playersRemainingForRoleSelection.first()
+        broadcastRoleChoices()
+        broadcast(CurrentRoleSelectingPlayer(nextPlayer))
+    }
+
+    fun getSpecialRoleFromInGameName(inGameName: String): SpecialRole? =
+        (FunctionalSpecialRole.entries + ColorPreferenceSpecialRole.entries).firstOrNull { it.inGameName == inGameName }
+
     suspend fun start() {
-        if (phase != GamePhase.LOBBY) return
+        if (phase !in setOf(GamePhase.LOBBY, GamePhase.ROLESELECTION)) return
         players = players.shuffled().toMutableSet()
         players.forEach { points[it] = 0 }
         phase = GamePhase.RUNNING
         broadcast(GameStarted(players))
+        broadcastRoleChoices()
         nextRound(true)
     }
 
@@ -374,9 +464,40 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun handleMessage(socket: WebSocketServerSession, msg: WSMessage, username: String) {
         when (msg) {
-            is StartGame -> {
-                if (username == owner) {
-                    start()
+            is StartButtonClicked -> {
+                if (phase == GamePhase.LOBBY && username == owner) {
+                    if (checkRule(Rules.SPECIALROLES) == "Freie Auswahl") {
+                        if (specialRoles.isEmpty()) {
+                            phase = GamePhase.ROLESELECTION
+                            playersRemainingForRoleSelection = players.shuffled().toMutableList()
+                            allowNextPlayerToPickRole()
+                        }
+                    } else if (checkRule(Rules.SPECIALROLES) == "Vorgegeben") {
+                        val allRoles = (ColorPreferenceSpecialRole.entries + FunctionalSpecialRole.entries).shuffled()
+                            .toMutableList()
+                        for (player in players) {
+                            specialRoles[allRoles.removeFirst()] = player
+                        }
+                        start()
+                    } else {
+                        start()
+                    }
+                }
+            }
+
+            is RequestSelectedRole -> {
+                if (username == playersRemainingForRoleSelection.firstOrNull()) {
+                    val requestedRole = getSpecialRoleFromInGameName(msg.roleName)
+                    if (requestedRole != null && requestedRole !in specialRoles.keys) {
+                        specialRoles[requestedRole] = username
+                        playersRemainingForRoleSelection.removeFirst()
+                        if (playersRemainingForRoleSelection.isEmpty()) {
+                            broadcast(CurrentRoleSelectingPlayer(""))
+                            start()
+                        } else {
+                            allowNextPlayerToPickRole()
+                        }
+                    }
                 }
             }
 
@@ -392,7 +513,7 @@ class Game(val id: Int, val owner: String) {
                         socket.sendWS(RedirectHome)
                     }
 
-                    GamePhase.RUNNING -> {
+                    GamePhase.RUNNING, GamePhase.ROLESELECTION -> {
                         endGame()
                         phase = GamePhase.FINISHED
                     }
@@ -500,7 +621,7 @@ enum class Rules(val options: List<String>) {
     @SerialName("Zauberer")
     MAGICIAN(
         listOf(
-            "Normal", "Letzter Zauberer"
+            "Normal", "Mittlerer Zauberer", "Letzter Zauberer"
         )
     ),
 
@@ -512,8 +633,37 @@ enum class Rules(val options: List<String>) {
 
     @SerialName("Spezialkarten")
     SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),
+
+    @SerialName("Spezialrollen")
+    SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben")),
+}
+
+interface SpecialRole {
+    val inGameName: String
+}
+
+enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole {
+    BLASTER("Der Sprengmeister"), HEADFOOL("Der Obernarr"), SERVANT("Der Knecht"), GLEEFUL("Der Schadenfrohe"), PESSIMIST(
+        "Der Pessimist"
+    ),
+    OPTIMIST("Der Optimist")
+}
+
+enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) :
+    SpecialRole {
+    WIZARDMASTER("Der Zaubermeister", Color.MAGICIAN, 4), REDSHEEP(
+        "Das rote Schaf",
+        Color.RED,
+        2
+    ),
+    YELLOWSHEEP("Das gelbe Schaf", Color.YELLOW, 2), GREENSHEEP(
+        "Das grüne Schaf",
+        Color.GREEN,
+        2
+    ),
+    BLUESHEEP("Das blaue Schaf", Color.BLUE, 2)
 }
 
 enum class GamePhase {
-    LOBBY, RUNNING, FINISHED
+    LOBBY, ROLESELECTION, RUNNING, FINISHED
 }

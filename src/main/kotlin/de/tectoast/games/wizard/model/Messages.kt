@@ -20,8 +20,8 @@ sealed class WSMessage {
     data class JoinGame(val gameID: Int) : WSMessage()
 
     @Serializable
-    @SerialName("StartGame")
-    data object StartGame : WSMessage()
+    @SerialName("StartButtonClicked")
+    data object StartButtonClicked : WSMessage()
 
     @Serializable
     @SerialName("LeaveGame")
@@ -50,6 +50,10 @@ sealed class WSMessage {
     @Serializable
     @SerialName("ChangeCard")
     data class ChangeCard(val card: Card) : WSMessage()
+
+    @Serializable
+    @SerialName("RequestSelectedRole")
+    data class RequestSelectedRole(val roleName: String) : WSMessage()
 
     // ############################### RESPONSES ###############################
     @Serializable
@@ -134,6 +138,14 @@ sealed class WSMessage {
     @Serializable
     @SerialName("SevenPointFiveUsed")
     data object SevenPointFiveUsed : WSMessage()
+    
+    @SerialName("SelectedRoles")
+    data class SelectedRoles(val roles : Map<String, String>) : WSMessage()
+
+    @Serializable
+    @SerialName("CurrentRoleSelectingPlayer")
+    data class CurrentRoleSelectingPlayer(val currentPlayer : String) : WSMessage()
+
 }
 
 @Serializable

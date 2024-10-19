@@ -290,8 +290,8 @@ class Game(val id: Int, val owner: String) {
      * @return true if the card is higher than the first card or trump
      */
     fun Card.isHigherThan(highestCardUntilNow: Card): Boolean {
-        if (this.color == Color.Special && this.value == 2f) return false
-        if (this.color == Color.Special && this.value == 3f) return true
+        if (this == FAIRY) return false
+        if (this == DRAGON) return true
         if (this.color == Color.FOOL) return false
         if (highestCardUntilNow == BOMB) return true
         if (highestCardUntilNow.color == Color.FOOL) return true

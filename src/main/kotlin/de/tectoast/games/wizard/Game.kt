@@ -274,7 +274,9 @@ class Game(val id: Int, val owner: String) {
             stitchGoals.clear()
             stitchDone.clear()
             isPredict = true
-            broadcast(Results(results))
+
+            if (checkRule(Rules.SPECIALROLES) != "Geheim") broadcast(Results(results))
+
             broadcast(winnerMessage)
             nextRound(false)
         } else {

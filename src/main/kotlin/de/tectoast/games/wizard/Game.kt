@@ -39,21 +39,25 @@ class Game(val id: Int, val owner: String) {
         buildList {
             for (color in listOf(Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE)) {
                 for (value in 1..13) {
-                    add(Card(color, value))
+                    add(Card(color, value.toFloat()))
                 }
             }
             for (i in 1..4) {
-                add(Card(Color.MAGICIAN, i))
-                add(Card(Color.FOOL, i))
+                add(Card(Color.MAGICIAN, i.toFloat()))
+                add(Card(Color.FOOL, i.toFloat()))
             }
-            //Spezialkarten haben Color.Special
-            //Bombe hat value 1
-            //weitere Spezialkarten haben andere value-Werte
             if (checkRule(Rules.SPECIALCARDS) == "Aktiviert") {
                 add(BOMB)
+                add(SEVENPOINTFIVE)
+                add(NINEPOINTSEVENFIVE)
             }
         }
     }
+
+    var userToChangeStitchPrediction: String? = null
+    var isSevenPointFiveUsed = false
+    val cardsToChange = mutableMapOf<String, Card>()
+    lateinit var winner: String
 
     private fun checkRule(rule: Rules) = rules[rule] ?: rule.options.first()
 
@@ -124,7 +128,7 @@ class Game(val id: Int, val owner: String) {
         broadcast(EndGame(players.sortedByDescending { points[it]!! }.map { PlayerPoints(it, points[it]!!) }))
 
     suspend fun nextRound(nodelay: Boolean) {
-        delay(if (nodelay) 0 else 5000)
+        delay(if (nodelay) 0 else 1000)
         if (++round * players.size > allCards.size) {
             endGame()
             return
@@ -148,7 +152,6 @@ class Game(val id: Int, val owner: String) {
 
     private val rnd = SecureRandom()
 
-    //for development and testing phase
     val forcedCards = listOf<Card>()
 
     suspend fun giveCards(round: Int) {
@@ -216,7 +219,7 @@ class Game(val id: Int, val owner: String) {
         coroutineScope {
             for (player in players) {
                 launch {
-                    player.send(Cards(cards[player]!!))
+                    player.send(Cards(cards[player]!!, NOTHINGCARD))
                 }
             }
         }
@@ -230,10 +233,35 @@ class Game(val id: Int, val owner: String) {
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
      */
-    suspend fun newSubround(winner: String, wasBombUsed: Boolean) {
+    suspend fun afterSubRound(wasBombUsed: Boolean) {
+        if (!wasBombUsed) {
+            stitchDone.add(winner, 1)
+            broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
+        }
+        val wasNinePointsSevenFiveUsed = layedCards.values.any { it.value == 9.75f }
+        isSevenPointFiveUsed = layedCards.values.any { it.value == 7.5f }
+        if (wasNinePointsSevenFiveUsed) {
+            userToChangeStitchPrediction = winner
+        }
         layedCards.clear()
         firstCard = null
-        val winnerMessage = NewSubRound(winner.takeUnless { wasBombUsed }, winner)
+        broadcast(Winner(winner.takeUnless { wasBombUsed }))
+        delay(3300)
+        broadcast(ClearForNewSubRound)
+
+        if (wasNinePointsSevenFiveUsed && !wasBombUsed) {
+            winner.send(ShowChangeStitchModal(true))
+        } else {
+            if (isSevenPointFiveUsed && cards[winner]!!.isNotEmpty()) {
+                broadcast(SevenPointFiveUsed)
+                return
+            }
+            newSubround()
+        }
+    }
+
+    suspend fun newSubround() {
+        cardsToChange.clear()
         if (cards[currentPlayer]!!.isEmpty()) {
             var numberOfLoosingPlayers = 0
             val results = mutableMapOf<String, Int>()
@@ -272,14 +300,13 @@ class Game(val id: Int, val owner: String) {
             stitchDone.clear()
             isPredict = true
             broadcast(Results(results))
-            broadcast(winnerMessage)
             nextRound(false)
         } else {
             roundPlayers = players.toMutableList()
             while (roundPlayers.first() != winner) roundPlayers.add(roundPlayers.removeFirst())
             originalOrderForSubround = roundPlayers.toList()
             currentPlayer = roundPlayers.removeFirst()
-            broadcast(winnerMessage)
+            broadcast(CurrentPlayer(currentPlayer))
         }
     }
 
@@ -293,10 +320,20 @@ class Game(val id: Int, val owner: String) {
                 return nextPlayer()
             }
             val firstPlayerOfRound = originalOrderForSubround[0]
-            val winner =
-                when {
-                    layedCards.values.all { it.color == Color.FOOL } -> firstPlayerOfRound
-                    layedCards.values.any { it.color == Color.MAGICIAN } -> {
+            winner = when {
+                layedCards.values.containsAll(
+                    listOf(
+                        FAIRY,
+                        DRAGON
+                    )
+                ) -> layedCards.entries.find { it.value == FAIRY }!!.key
+
+                layedCards.values.contains(DRAGON) -> layedCards.entries.find { it.value == DRAGON }!!.key
+
+                layedCards.entries.filter { it.value != FAIRY }
+                    .all { it.value.color == Color.FOOL } -> layedCards.entries.first { it.value.color == Color.FOOL }.key
+
+                layedCards.values.any { it.color == Color.MAGICIAN } -> {
                         if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
                         else if (checkRule(Rules.MAGICIAN) == "Mittlerer Zauberer") {
                             val numberOfWizards = layedCards.entries.count { it.value.color == Color.MAGICIAN }
@@ -304,27 +341,22 @@ class Game(val id: Int, val owner: String) {
                             layedCards.entries.filter { it.value.color == Color.MAGICIAN  }[winningWizardIndex].key
                         }
                         else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
-                    }
-
-                    else -> {
-                        var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
-                        for (i in 1..<players.size) {
-                            val playerToCheck = originalOrderForSubround[i]
-                            val card = layedCards[playerToCheck]!!
-                            if (card.isHigherThan(highest.first)) {
-                                highest = card to playerToCheck
-                            }
-                        }
-                        highest.second
-                    }
                 }
+                else -> {
+                    var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
+                    for (i in 1..<players.size) {
+                        val playerToCheck = originalOrderForSubround[i]
+                        val card = layedCards[playerToCheck]!!
+                        if (card.isHigherThan(highest.first)) {
+                            highest = card to playerToCheck
+                        }
+                    }
+                    highest.second
+                }
+            }
             val wasBombUsed = layedCards.values.contains(BOMB)
 
-            if (!wasBombUsed) {
-                stitchDone.add(winner, 1)
-                broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
-            }
-            newSubround(winner, wasBombUsed)
+            afterSubRound(wasBombUsed)
             return
         }
         broadcast(CurrentPlayer(currentPlayer))
@@ -334,6 +366,8 @@ class Game(val id: Int, val owner: String) {
      * @return true if the card is higher than the first card or trump
      */
     fun Card.isHigherThan(highestCardUntilNow: Card): Boolean {
+        if (this == FAIRY) return false
+        if (this == DRAGON) return true
         if (this.color == Color.FOOL) return false
         if (highestCardUntilNow == BOMB) return true
         if (highestCardUntilNow.color == Color.FOOL) return true
@@ -348,23 +382,30 @@ class Game(val id: Int, val owner: String) {
         broadcast(RuleChange(rules))
     }
 
-    suspend fun layCard(name: String, card: Card) {
+    suspend fun layCard(name: String, layCard: LayCard) {
         if (name != currentPlayer || isPredict) return
         val playerCards = cards[name]!!
-        if (card !in playerCards) return
+        val (realCard, selectedColor) = layCard
+        if (realCard !in playerCards) return
+        val card = selectedColor?.let {
+            if (!it.isNormalColor || realCard !in rainbowCards) return
+            realCard.copy(color = it)
+        } ?: realCard
         firstCard?.let { fc ->
-            if (card.color == Color.MAGICIAN || card.color == Color.FOOL || card == Card(
-                    Color.Special,
-                    1
-                ) || fc.color == Color.MAGICIAN
-            ) return@let
-            if (fc.color != card.color && playerCards.any { it.color == fc.color }) return
+            if (card.color !in setOf(
+                    Color.FOOL,
+                    Color.MAGICIAN,
+                    Color.Special
+                ) && fc.color != card.color && fc.color != Color.MAGICIAN && fc != DRAGON && playerCards.any { it.color == fc.color }
+            ) return
         }
-        if (layedCards.values.all { it.color == Color.FOOL }) {
-            firstCard = card
+        if (layedCards.values.all { it.color in setOf(Color.FOOL, Color.Special) }) {
+            if (card == DRAGON || card.color != Color.Special && card.color != Color.FOOL) {
+                firstCard = card
+            }
         }
         layedCards[name] = card
-        playerCards.remove(card)
+        playerCards.remove(realCard)
         broadcast(PlayerCard(LayedCard(card, name)))
         nextPlayer()
     }
@@ -394,7 +435,7 @@ class Game(val id: Int, val owner: String) {
 
     suspend fun sendCurrentState(username: String) {
         with(SocketManager[username]) {
-            sendWS(Cards(cards[username].orEmpty()))
+            sendWS(Cards(cards[username].orEmpty(), NOTHINGCARD))
             sendWS(Trump(trump, emptyMap()))
             sendWS(Round(round, originalOrderForSubround[1].takeIf { stitchGoals[username] == null } ?: ""))
             sendWS(IsPredict(isPredict))
@@ -462,6 +503,7 @@ class Game(val id: Int, val owner: String) {
 
             is LeaveGame -> {
                 // TODO: Check which phase and probably change owner etc (or delete the game)
+                // TODO: if all users left: delete room
                 when (phase) {
                     GamePhase.LOBBY -> {
                         if (username == owner) {
@@ -498,12 +540,59 @@ class Game(val id: Int, val owner: String) {
             }
 
             is RuleChangeRequest -> {
-                if (username == owner && phase == GamePhase.LOBBY)
-                    changeRule(msg.rule, msg.value)
+                if (username == owner && phase == GamePhase.LOBBY) changeRule(msg.rule, msg.value)
             }
 
             is LayCard -> {
-                layCard(username, msg.card)
+                layCard(username, msg)
+            }
+
+            is ChangeStitchPrediction -> {
+                if (username != userToChangeStitchPrediction) return
+                if (abs(msg.value) != 1) return
+                if (stitchGoals[username]!! + msg.value !in 0..round) return
+                socket.sendWS(ShowChangeStitchModal(false))
+                delay(200)
+                val newPrediction = stitchGoals.add(username, msg.value)!!
+                userToChangeStitchPrediction = null
+                broadcast(StitchGoal(username, newPrediction))
+                if (isSevenPointFiveUsed && cards[username]!!.isNotEmpty()) {
+                    broadcast(SevenPointFiveUsed)
+                }
+                newSubround()
+            }
+
+            is ChangeCard -> {
+                //TODO: rein theoretisch kann Zuschauer game crashen? Wenn Zuschauer eine Nachricht schickt, was ist dann cards[ZuschauerName]?
+                if (!isSevenPointFiveUsed || !cards[username]!!.contains(msg.card) || cardsToChange[username] != null) {
+                    return
+                }
+                cards[username]!!.remove(msg.card)
+                cardsToChange[username] = msg.card
+                if (cardsToChange.size == players.size) {
+                    val playersIterator = players.iterator()
+                    val firstPlayer = playersIterator.next()
+                    var player = firstPlayer
+                    var nextPlayer: String
+                    val newCards = mutableMapOf<String, Card>()
+                    while (playersIterator.hasNext()) {
+                        nextPlayer = playersIterator.next()
+                        cards[nextPlayer]!!.add(cardsToChange[player]!!)
+                        newCards[nextPlayer] = cardsToChange[player]!!
+                        player = nextPlayer
+                    }
+                    cards[firstPlayer]!!.add(cardsToChange[player]!!)
+                    newCards[firstPlayer] = cardsToChange[player]!!
+                    coroutineScope {
+                        for (user in players) {
+                            launch {
+                                user.send(Cards(cards[user]!!, newCards[user]!!))
+                            }
+                        }
+                    }
+                    isSevenPointFiveUsed = false
+                    newSubround()
+                }
             }
 
             else -> {
@@ -513,11 +602,15 @@ class Game(val id: Int, val owner: String) {
     }
 
     companion object {
-        val NOTHINGCARD = Card(Color.NOTHING, -1)
-        val BOMB = Card(Color.Special, 1)
+        val NOTHINGCARD = Card(Color.NOTHING, -1f)
+        val BOMB = Card(Color.Special, 1f)
+        val SEVENPOINTFIVE = Card(Color.Special, 7.5f)
+        val NINEPOINTSEVENFIVE = Card(Color.Special, 9.75f)
+        val FAIRY = Card(Color.Special, 2f)
+        val DRAGON = Card(Color.Special, 3f)
         val logger = KotlinLogging.logger {}
+        val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
     }
-
 }
 
 @Serializable

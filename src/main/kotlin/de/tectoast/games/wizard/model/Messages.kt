@@ -33,7 +33,7 @@ sealed class WSMessage {
 
     @Serializable
     @SerialName("LayCard")
-    data class LayCard(val card: Card) : WSMessage()
+    data class LayCard(val card: Card, val selectedColor: Color? = null) : WSMessage()
 
     @Serializable
     @SerialName("RuleChangeRequest")
@@ -42,6 +42,14 @@ sealed class WSMessage {
     @Serializable
     @SerialName("ChangeUsername")
     data class ChangeUsername(val username: String) : WSMessage()
+
+    @Serializable
+    @SerialName("ChangeStitchPrediction")
+    data class ChangeStitchPrediction(val value: Int) : WSMessage()
+
+    @Serializable
+    @SerialName("ChangeCard")
+    data class ChangeCard(val card: Card) : WSMessage()
 
     @Serializable
     @SerialName("RequestSelectedRole")
@@ -74,7 +82,7 @@ sealed class WSMessage {
 
     @Serializable
     @SerialName("Cards")
-    data class Cards(val cards: List<Card>) : WSMessage()
+    data class Cards(val cards: List<Card>, val newCard: Card) : WSMessage()
 
     @Serializable
     @SerialName("PlayerCard")
@@ -89,8 +97,12 @@ sealed class WSMessage {
     data class Trump(val trump: Card, val shifted: Map<String, Int>) : WSMessage()
 
     @Serializable
-    @SerialName("NewSubRound")
-    data class NewSubRound(val winner: String?, val nextPlayer: String) : WSMessage()
+    @SerialName("Winner")
+    data class Winner(val winner: String?) : WSMessage()
+
+    @Serializable
+    @SerialName("ClearForNewSubRound")
+    data object ClearForNewSubRound : WSMessage()
 
     @Serializable
     @SerialName("IsPredict")
@@ -121,6 +133,12 @@ sealed class WSMessage {
     data object AcceptedGoal : WSMessage()
 
     @Serializable
+    @SerialName("ShowChangeStitchModal")
+    data class ShowChangeStitchModal(val show: Boolean) : WSMessage()
+    @Serializable
+    @SerialName("SevenPointFiveUsed")
+    data object SevenPointFiveUsed : WSMessage()
+    
     @SerialName("SelectedRoles")
     data class SelectedRoles(val roles : Map<String, String>) : WSMessage()
 

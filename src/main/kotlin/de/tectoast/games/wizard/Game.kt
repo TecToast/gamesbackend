@@ -203,7 +203,6 @@ class Game(val id: Int, val owner: String) {
 
         if (wasNinePointsSevenFiveUsed && !wasBombUsed) {
             winner.send(ShowChangeStitchModal(true))
-            return
         } else {
             if (isSevenPointFiveUsed && cards[winner]!!.isNotEmpty()) {
                 broadcast(SevenPointFiveUsed)

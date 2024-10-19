@@ -244,10 +244,10 @@ class Game(val id: Int, val owner: String) {
                         else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
                     } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
                         if (p.predictedCorrectly() && stitchDone[p] == 0) 50
-                        else p.normalPointCalculation().coerceAtMost(70)
+                        else p.normalPointCalculation().coerceAtMost(20 + 10*(10/players.size))
                     } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
                         if (p.predictedCorrectly()) {
-                            stitchDone[p]!! * 10 + if (stitchDone[p]!! <= 3) 0 else 20
+                            stitchDone[p]!! * 10 + if (stitchDone[p]!! <= (10/players.size)) 0 else 20
                         } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
                             5 * stitchDone[p]!!
                         } else {

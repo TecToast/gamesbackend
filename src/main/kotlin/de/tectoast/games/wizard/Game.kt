@@ -185,6 +185,7 @@ class Game(val id: Int, val owner: String) {
                 if (cards.getValue(player).size < round) {
                     enoughCardsDealt = false
                     val nextCard = mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD
+
                     var cardStolen = false
                     specialRoles.entries.firstOrNull { (it.key as? ColorPreferenceSpecialRole)?.color == nextCard.color }
                         ?.takeIf {
@@ -267,12 +268,15 @@ class Game(val id: Int, val owner: String) {
             val results = mutableMapOf<String, Int>()
             players.forEach { p ->
                 val amount =
-                    if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
+                    if (specialRoles[FunctionalSpecialRole.GAMBLER] == p) {
+                        if (p.predictedCorrectly()) stitchDone[p]!! * 20
+                        else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
+                    } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
                         if (p.predictedCorrectly() && stitchDone[p] == 0) 50
-                        else p.normalPointCalculation().coerceAtMost(70)
+                        else p.normalPointCalculation().coerceAtMost(20 + 10*(10/players.size))
                     } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
                         if (p.predictedCorrectly()) {
-                            stitchDone[p]!! * 10 + if (stitchDone[p]!! <= 3) 0 else 20
+                            stitchDone[p]!! * 10 + if (stitchDone[p]!! <= (10/players.size)) 0 else 20
                         } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
                             5 * stitchDone[p]!!
                         } else {
@@ -288,7 +292,7 @@ class Game(val id: Int, val owner: String) {
                 results[p] = amount
             }
             specialRoles[FunctionalSpecialRole.GLEEFUL]?.let { gleeful ->
-                results.add(gleeful, numberOfLoosingPlayers * 3)
+                results.add(gleeful, numberOfLoosingPlayers * 5)
             }
 
             for (p in results.keys) {
@@ -299,7 +303,7 @@ class Game(val id: Int, val owner: String) {
             stitchGoals.clear()
             stitchDone.clear()
             isPredict = true
-            broadcast(Results(results))
+            if (checkRule(Rules.SPECIALROLES) != "Geheim") broadcast(Results(results))
             nextRound(false)
         } else {
             roundPlayers = players.toMutableList()
@@ -411,7 +415,11 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun broadcastRoleChoices() {
-        broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName }))
+        if (checkRule(Rules.SPECIALROLES) == "Geheim") {
+            for (player in players) {
+                player.send(SelectedRoles(specialRoles.entries.associate { if (it.value == player) it.value to it.key.inGameName else it.value to "???"}))
+            }
+        } else broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName}))
     }
 
     suspend fun allowNextPlayerToPickRole() {
@@ -472,7 +480,7 @@ class Game(val id: Int, val owner: String) {
                             playersRemainingForRoleSelection = players.shuffled().toMutableList()
                             allowNextPlayerToPickRole()
                         }
-                    } else if (checkRule(Rules.SPECIALROLES) == "Vorgegeben") {
+                    } else if (checkRule(Rules.SPECIALROLES) in setOf("Vorgegeben", "Geheim")) {
                         val allRoles = (ColorPreferenceSpecialRole.entries + FunctionalSpecialRole.entries).shuffled()
                             .toMutableList()
                         for (player in players) {
@@ -635,7 +643,7 @@ enum class Rules(val options: List<String>) {
     SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),
 
     @SerialName("Spezialrollen")
-    SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben")),
+    SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben", "Geheim")),
 }
 
 interface SpecialRole {
@@ -646,7 +654,8 @@ enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole 
     BLASTER("Der Sprengmeister"), HEADFOOL("Der Obernarr"), SERVANT("Der Knecht"), GLEEFUL("Der Schadenfrohe"), PESSIMIST(
         "Der Pessimist"
     ),
-    OPTIMIST("Der Optimist")
+    OPTIMIST("Der Optimist"),
+    GAMBLER("Der Gambler")
 }
 
 enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) :

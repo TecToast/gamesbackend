@@ -398,7 +398,7 @@ class Game(val id: Int, val owner: String) {
             realCard.copy(color = it)
         } ?: realCard
         firstCard?.let { fc ->
-            if (card.color !in setOf(
+            if (realCard.color !in setOf(
                     Color.FOOL,
                     Color.MAGICIAN,
                     Color.Special

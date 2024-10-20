@@ -139,6 +139,7 @@ sealed class WSMessage {
     @SerialName("SevenPointFiveUsed")
     data object SevenPointFiveUsed : WSMessage()
     
+    @Serializable
     @SerialName("SelectedRoles")
     data class SelectedRoles(val roles : Map<String, String>) : WSMessage()
 

@@ -50,6 +50,8 @@ class Game(val id: Int, val owner: String) {
                 add(BOMB)
                 add(SEVENPOINTFIVE)
                 add(NINEPOINTSEVENFIVE)
+                add(FAIRY)
+                add(DRAGON)
             }
         }
     }

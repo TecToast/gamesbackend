@@ -169,7 +169,7 @@ class Game(val id: Int, val owner: String) {
         specialRoles[FunctionalSpecialRole.SERVANT]?.let { user ->
             val playerCards = cards.getValue(user)
             for (servantCard in stack.filter {
-                it.value == 2 && it.color in setOf(
+                it.value == 2f && it.color in setOf(
                     Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE
                 )
             }) {

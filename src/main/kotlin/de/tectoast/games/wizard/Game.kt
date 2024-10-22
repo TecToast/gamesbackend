@@ -374,6 +374,7 @@ class Game(val id: Int, val owner: String) {
     fun Card.isHigherThan(highestCardUntilNow: Card): Boolean {
         if (this == FAIRY) return false
         if (this == DRAGON) return true
+        if (highestCardUntilNow == FAIRY) return true
         if (this.color == Color.FOOL) return false
         if (highestCardUntilNow == BOMB) return true
         if (highestCardUntilNow.color == Color.FOOL) return true

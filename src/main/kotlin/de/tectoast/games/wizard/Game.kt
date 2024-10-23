@@ -188,36 +188,47 @@ class Game(val id: Int, val owner: String) {
                     enoughCardsDealt = false
                     val nextCard = mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD
 
-                    var cardStolen = false
+                    var stolenBy:String? = null
+                    var replacedCard:Card? = null
                     specialRoles.entries.firstOrNull { (it.key as? ColorPreferenceSpecialRole)?.color == nextCard.color }
                         ?.takeIf {
-                            cards.getValue(it.value).size < round && rnd.nextInt((it.key as ColorPreferenceSpecialRole).chance) == 0
+                            rnd.nextInt((it.key as ColorPreferenceSpecialRole).chance) == 0
                         }?.let {
+                            if (cards.getValue(it.value).size >= round) replacedCard = cards.getValue(it.value).random()
                             cards.getValue(it.value).add(nextCard)
-                            cardStolen = true
+                            stolenBy = it.value
                         }
                     if (nextCard == BOMB) {
                         specialRoles[FunctionalSpecialRole.BLASTER]?.let { blaster ->
-                            if (cards.getValue(blaster).size < round) {
-                                cards.getValue(blaster).add(nextCard)
-                                cardStolen = true
-                            }
+                            if (cards.getValue(blaster).size >= round) replacedCard = cards.getValue(blaster).random()
+                            cards.getValue(blaster).add(nextCard)
+                            stolenBy = blaster
                         }
                     }
 
-                    if (!cardStolen) cards.getOrPut(player) { mutableListOf() }.add(nextCard)
+                    if (stolenBy == null) {
+                        cards.getOrPut(player) { mutableListOf() }.add(nextCard)
+                    } else if (replacedCard != null) {
+                        cards[stolenBy]!!.remove(replacedCard!!)
+                        cards.getOrPut(player) { mutableListOf() }.add(replacedCard!!)
+                    }
                 }
             }
         }
         val shifted = mutableMapOf<String, Int>()
         trump = stack.removeFirstOrNull() ?: NOTHINGCARD
-        if (checkRule(Rules.TRUMP) == "Nur Farben") {
-            val forbidden = listOf(Color.MAGICIAN, Color.FOOL, Color.Special)
-            while (trump.color in forbidden) {
-                trump = stack.removeFirstOrNull() ?: NOTHINGCARD
-                if (trump.color in forbidden) shifted.add(trump.color.text, 1)
-            }
+
+        val forbidden = if (checkRule(Rules.TRUMP) == "Nur Farben") {
+            listOf(Color.MAGICIAN, Color.FOOL, Color.Special)
+        } else {
+            listOf()
         }
+
+        while (skipTrump(trump, forbidden)) {
+            shifted.add(trump.color.text, 1)
+            trump = stack.removeFirstOrNull() ?: NOTHINGCARD
+        }
+
         broadcast(Trump(trump, shifted))
         coroutineScope {
             for (player in players) {
@@ -226,6 +237,15 @@ class Game(val id: Int, val owner: String) {
                 }
             }
         }
+    }
+
+    fun skipTrump(trumpCard:Card, forbidden:List<Color>):Boolean {
+        val presentColorPreferences:List<Color> = buildList { specialRoles.keys.forEach {
+                if (it is ColorPreferenceSpecialRole && it != ColorPreferenceSpecialRole.WIZARDMASTER) add(it.color)
+            }
+        }
+        return forbidden.contains(trumpCard.color) || (presentColorPreferences.isNotEmpty() &&
+                !presentColorPreferences.contains(trumpCard.color) && rnd.nextInt(2) == 0)
     }
 
     fun String.normalPointCalculation() =
@@ -275,10 +295,10 @@ class Game(val id: Int, val owner: String) {
                         else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
                     } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
                         if (p.predictedCorrectly() && stitchDone[p] == 0) 50
-                        else p.normalPointCalculation().coerceAtMost(20 + 10*(10/players.size))
+                        else p.normalPointCalculation().coerceAtMost(20 + 10*(12/players.size))
                     } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
                         if (p.predictedCorrectly()) {
-                            stitchDone[p]!! * 10 + if (stitchDone[p]!! <= (10/players.size)) 0 else 20
+                            stitchDone[p]!! * 10 + if (stitchDone[p]!! < (12/players.size)) 0 else 20
                         } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
                             5 * stitchDone[p]!!
                         } else {

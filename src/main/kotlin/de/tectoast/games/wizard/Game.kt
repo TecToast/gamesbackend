@@ -209,8 +209,8 @@ class Game(val id: Int, val owner: String) {
                     if (stolenBy == null) {
                         cards.getOrPut(player) { mutableListOf() }.add(nextCard)
                     } else if (replacedCard != null) {
-                        cards[stolenBy]!!.remove(replacedCard!!)
-                        cards.getOrPut(player) { mutableListOf() }.add(replacedCard!!)
+                        cards[stolenBy]!!.remove(replacedCard)
+                        cards.getOrPut(player) { mutableListOf() }.add(replacedCard)
                     }
                 }
             }

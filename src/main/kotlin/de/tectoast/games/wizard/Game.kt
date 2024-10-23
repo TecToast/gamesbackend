@@ -188,8 +188,8 @@ class Game(val id: Int, val owner: String) {
                     enoughCardsDealt = false
                     val nextCard = mutableForced.removeFirstOrNull() ?: stack.removeFirstOrNull() ?: NOTHINGCARD
 
-                    var stolenBy:String? = null
-                    var replacedCard:Card? = null
+                    var stolenBy: String? = null
+                    var replacedCard: Card? = null
                     specialRoles.entries.firstOrNull { (it.key as? ColorPreferenceSpecialRole)?.color == nextCard.color }
                         ?.takeIf {
                             rnd.nextInt((it.key as ColorPreferenceSpecialRole).chance) == 0
@@ -239,8 +239,9 @@ class Game(val id: Int, val owner: String) {
         }
     }
 
-    fun skipTrump(trumpCard:Card, forbidden:List<Color>):Boolean {
-        val presentColorPreferences:List<Color> = buildList { specialRoles.keys.forEach {
+    fun skipTrump(trumpCard: Card, forbidden: List<Color>): Boolean {
+        val presentColorPreferences: List<Color> = buildList {
+            specialRoles.keys.forEach {
                 if (it is ColorPreferenceSpecialRole && it != ColorPreferenceSpecialRole.WIZARDMASTER) add(it.color)
             }
         }
@@ -295,10 +296,10 @@ class Game(val id: Int, val owner: String) {
                         else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
                     } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
                         if (p.predictedCorrectly() && stitchDone[p] == 0) 50
-                        else p.normalPointCalculation().coerceAtMost(20 + 10*(12/players.size))
+                        else p.normalPointCalculation().coerceAtMost(20 + 10 * (12 / players.size))
                     } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
                         if (p.predictedCorrectly()) {
-                            stitchDone[p]!! * 10 + if (stitchDone[p]!! < (12/players.size)) 0 else 20
+                            stitchDone[p]!! * 10 + if (stitchDone[p]!! < (12 / players.size)) 0 else 20
                         } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
                             5 * stitchDone[p]!!
                         } else {
@@ -360,14 +361,14 @@ class Game(val id: Int, val owner: String) {
                     .all { it.value.color == Color.FOOL } -> layedCards.entries.first { it.value.color == Color.FOOL }.key
 
                 layedCards.values.any { it.color == Color.MAGICIAN } -> {
-                        if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
-                        else if (checkRule(Rules.MAGICIAN) == "Mittlerer Zauberer") {
-                            val numberOfWizards = layedCards.entries.count { it.value.color == Color.MAGICIAN }
-                            val winningWizardIndex = (numberOfWizards - 1) / 2
-                            layedCards.entries.filter { it.value.color == Color.MAGICIAN  }[winningWizardIndex].key
-                        }
-                        else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
+                    if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
+                    else if (checkRule(Rules.MAGICIAN) == "Mittlerer Zauberer") {
+                        val numberOfWizards = layedCards.entries.count { it.value.color == Color.MAGICIAN }
+                        val winningWizardIndex = (numberOfWizards - 1) / 2
+                        layedCards.entries.filter { it.value.color == Color.MAGICIAN }[winningWizardIndex].key
+                    } else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
                 }
+
                 else -> {
                     var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
                     for (i in 1..<players.size) {
@@ -439,9 +440,9 @@ class Game(val id: Int, val owner: String) {
     suspend fun broadcastRoleChoices() {
         if (checkRule(Rules.SPECIALROLES) == "Geheim") {
             for (player in players) {
-                player.send(SelectedRoles(specialRoles.entries.associate { if (it.value == player) it.value to it.key.inGameName else it.value to "???"}))
+                player.send(SelectedRoles(specialRoles.entries.associate { if (it.value == player) it.value to it.key.inGameName else it.value to "???" }))
             }
-        } else broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName}))
+        } else broadcast(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName }))
     }
 
     suspend fun allowNextPlayerToPickRole() {

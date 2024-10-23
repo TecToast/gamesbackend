@@ -240,6 +240,7 @@ class Game(val id: Int, val owner: String) {
     }
 
     fun skipTrump(trumpCard: Card, forbidden: List<Color>): Boolean {
+        if (trumpCard == NOTHINGCARD) return false
         val presentColorPreferences: List<Color> = buildList {
             specialRoles.keys.forEach {
                 if (it is ColorPreferenceSpecialRole && it != ColorPreferenceSpecialRole.WIZARDMASTER) add(it.color)

@@ -127,7 +127,12 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun endGame() =
-        broadcast(EndGame(players.sortedByDescending { points[it]!! }.map { PlayerPoints(it, points[it]!!) }))
+        if (checkRule(Rules.SPECIALROLES) == "Deaktiviert")
+            broadcast(EndGame(players.sortedByDescending { points[it]!! }.map { PlayerPoints(it, points[it]!!) }))
+        else
+            broadcast(EndGame(players.sortedByDescending { points[it]!! }.map {
+                PlayerPoints(it + " - " + specialRoles.entries.associate { it.value to it.key.inGameName}[it]
+                    , points[it]!!) }))
 
     suspend fun nextRound(nodelay: Boolean) {
         delay(if (nodelay) 0 else 1000)
@@ -327,7 +332,13 @@ class Game(val id: Int, val owner: String) {
             stitchGoals.clear()
             stitchDone.clear()
             isPredict = true
-            if (checkRule(Rules.SPECIALROLES) != "Geheim") broadcast(Results(results))
+            if (checkRule(Rules.SPECIALROLES) != "Geheim") {
+                broadcast(Results(results))
+            } else {
+                for (player in players) {
+                    player.send(Results(results.filterKeys { it == player }))
+                }
+            }
             nextRound(false)
         } else {
             roundPlayers = players.toMutableList()
@@ -480,6 +491,12 @@ class Game(val id: Int, val owner: String) {
                 sendWS(PlayerCard(LayedCard(it.value, it.key)))
             }
             val isBlind = checkRule(Rules.PREDICTION) == "Blind"
+
+            if (checkRule(Rules.SPECIALROLES) == "Geheim") {
+                username.send(SelectedRoles(specialRoles.entries.associate { if (it.value == username) it.value to it.key.inGameName else it.value to "???" }))
+            } else {
+                username.send(SelectedRoles(specialRoles.entries.associate { it.value to it.key.inGameName }))
+            }
 
             if (isBlind && isPredict) {
                 stitchGoals.keys.forEach {

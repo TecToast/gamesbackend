@@ -135,6 +135,7 @@ sealed class WSMessage {
     @Serializable
     @SerialName("ShowChangeStitchModal")
     data class ShowChangeStitchModal(val show: Boolean) : WSMessage()
+
     @Serializable
     @SerialName("SevenPointFiveUsed")
     data object SevenPointFiveUsed : WSMessage()

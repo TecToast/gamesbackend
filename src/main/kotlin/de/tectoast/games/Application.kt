@@ -14,9 +14,9 @@ import io.ktor.serialization.kotlinx.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
-import io.ktor.server.cio.CIO
+import io.ktor.server.cio.*
 import io.ktor.server.engine.*
-import io.ktor.server.plugins.callloging.*
+import io.ktor.server.plugins.calllogging.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -28,8 +28,8 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.slf4j.event.Level
 import java.io.File
-import java.time.Duration
 import kotlin.system.exitProcess
+import kotlin.time.Duration.Companion.seconds
 import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
 
 lateinit var config: Config
@@ -219,8 +219,8 @@ private fun Application.installPlugins() {
         level = Level.INFO
     }
     install(WebSockets) {
-        timeout = Duration.ofSeconds(15)
-        pingPeriod = Duration.ofSeconds(30)
+        timeout = 15.seconds
+        pingPeriod = 30.seconds
         maxFrameSize = Long.MAX_VALUE
         masking = false
         contentConverter = KotlinxWebsocketSerializationConverter(Json)

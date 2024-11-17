@@ -1,21 +1,18 @@
 package de.tectoast.games.jeopardy
 
-import de.tectoast.games.badReq
-import de.tectoast.games.createDefaultRoutes
-import de.tectoast.games.db
+import de.tectoast.games.*
 import de.tectoast.games.db.JeopardyDataDB
 import de.tectoast.games.db.JeopardyDataFrontend
 import de.tectoast.games.db.JeopardyUser
-import de.tectoast.games.readString
-import de.tectoast.games.sessionOrUnauthorized
 import de.tectoast.games.utils.createDataCache
 import io.ktor.http.*
 import io.ktor.http.content.*
-import io.ktor.server.application.*
 import io.ktor.server.http.content.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.*
+import kotlinx.io.readByteArray
 import java.io.File
 
 private val dataCache = createDataCache { JeopardyUser(it.avatarUrl, it.effectiveName, null, 0) }
@@ -46,7 +43,7 @@ fun Route.jeopardy() {
             mediaBaseDir.resolve(session.userId.toString()).resolve(id).resolve(category).resolve(points).resolve(type)
         path.mkdirs()
         val fileData = (data.readPart() as? PartData.FileItem) ?: return@post call.badReq()
-        val file = fileData.streamProvider().readBytes()
+        val file = fileData.provider().readRemaining().readByteArray()
         val resolve = path.resolve(fileData.originalFileName?.replace(fileNotAllowedRegex, "") ?: "file")
         resolve.writeBytes(file)
         call.respond(HttpStatusCode.OK, resolve.name)

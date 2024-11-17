@@ -12,9 +12,10 @@ import io.ktor.serialization.deserialize
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import kotlinx.serialization.Serializable
 import mu.KotlinLogging
 import java.io.File
-
+@Serializable
 data class WizardSession(val token: String)
 
 val logger = KotlinLogging.logger {}

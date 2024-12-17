@@ -3,26 +3,19 @@ package de.tectoast.games
 import com.mongodb.client.model.Filters
 import de.tectoast.games.db.BackendBase
 import de.tectoast.games.db.FrontEndBase
-import de.tectoast.games.db.JeopardyDataDB
 import de.tectoast.games.utils.ExpiringMap
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.content.MultiPartData
-import io.ktor.http.content.PartData
-import io.ktor.http.encodeURLPathPart
+import io.ktor.http.*
+import io.ktor.http.content.*
 import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.call
-import io.ktor.server.request.receive
-import io.ktor.server.request.receiveText
-import io.ktor.server.response.respond
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
+import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import mu.KotlinLogging
@@ -135,12 +128,12 @@ inline fun <B : BackendBase, reified F : FrontEndBase<U>, U> Route.createDefault
         val data = call.findQuizData(coll) ?: return@post
         val newData = call.receive<F>()
         call.respond(runCatching {
-            db.jeopardy.updateOne(
+            coll.updateOne(
                 and(Filters.eq("user", data.user), Filters.eq("id", data.id)), set(
                     *updateMap.map { (backend, frontend) ->
                         backend setTo frontend.get(newData)
                     }.toTypedArray(),
-                    JeopardyDataDB::participants setTo newData.participants.keys.toList()
+                    BackendBase::participants setTo newData.participants.keys.toList()
                 )
             )
         }.fold(onSuccess = { HttpStatusCode.OK }, onFailure = {

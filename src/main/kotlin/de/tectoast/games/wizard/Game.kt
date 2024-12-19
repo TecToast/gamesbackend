@@ -314,6 +314,9 @@ class Game(val id: Int, val owner: String) {
                     } else {
                         -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
                     }
+                } else if (specialRoles[FunctionalSpecialRole.GREEDY] == p) {
+                    if (stitchDone[p]!! >= stitchGoals[p]!!) 5 * (stitchGoals[p]!! + stitchDone[p]!!)
+                    else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
                 } else {
                     p.normalPointCalculation()
                 }
@@ -362,7 +365,13 @@ class Game(val id: Int, val owner: String) {
                 return nextPlayer()
             }
             val firstPlayerOfRound = originalOrderForSubround[0]
+            val thiefPlayer = specialRoles[FunctionalSpecialRole.THIEF]
             winner = when {
+
+                layedCards[thiefPlayer]?.let {
+                            (it.value == 1.0f && it.color.isNormalColor && rnd.nextInt(0, 2) == 0)
+                        } == true -> thiefPlayer!!
+
                 layedCards.values.containsAll(
                     listOf(
                         FAIRY, DRAGON
@@ -696,7 +705,7 @@ enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole 
     BLASTER("Der Sprengmeister"), HEADFOOL("Der Obernarr"), SERVANT("Der Knecht"), GLEEFUL("Der Schadenfrohe"), PESSIMIST(
         "Der Pessimist"
     ),
-    OPTIMIST("Der Optimist"), GAMBLER("Der Gambler")
+    OPTIMIST("Der Optimist"), GAMBLER("Der Gambler"), THIEF("Der Dieb"), GREEDY("Der Gierige")
 }
 
 enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) :

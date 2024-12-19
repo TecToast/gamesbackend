@@ -32,7 +32,7 @@ fun initJDA(config: Config) {
         config.discordBotToken,
         intents = listOf(GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.GUILD_MEMBERS)
     )
-    if (config.devMode) return
+//    if (config.devMode) return
     jda.listener<ReadyEvent> {
         val guild = jda.getGuildById(GUILD_ID)!!
         guild.upsertCommand(
@@ -44,6 +44,9 @@ fun initJDA(config: Config) {
                 option<String>("name", "The name of the quiz", required = true, autocomplete = true)
             }
         ).queue()
+        guild.upsertCommand("nobodyisperfect", "Your answer to the question").apply {
+            option<String>("answer", "Your answer to the question", required = true, autocomplete = true)
+        }.queue()
     }
     jda.listener<CommandAutoCompleteInteractionEvent> {
         val str = it.focusedOption.value

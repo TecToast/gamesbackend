@@ -24,7 +24,7 @@ enum class Color(val text: String, val isNormalColor: Boolean = false) {
     FOOL("Narr"),
 
     @SerialName("Spezial")
-    Special("Spezial"),
+    SPECIAL("Spezial"),
 
     @SerialName("Nichts")
     NOTHING("Nichts")

@@ -127,15 +127,15 @@ class Game(val id: Int, val owner: String) {
     }
 
     suspend fun endGame() = broadcast(EndGame(players.sortedByDescending { points[it]!! }.map {
-            PlayerPoints(buildString {
-                append(it)
-                if(checkRule(Rules.SPECIALROLES) != "Deaktiviert") {
-                    append(" - ")
-                    append(specialRoles.entries.filter { roleEntry -> roleEntry.value == it }
-                        .joinToString { it.key.inGameName })
-                }
-            }, points[it]!!)
-        }))
+        PlayerPoints(buildString {
+            append(it)
+            if (checkRule(Rules.SPECIALROLES) != "Deaktiviert") {
+                append(" - ")
+                append(specialRoles.entries.filter { roleEntry -> roleEntry.value == it }
+                    .joinToString { it.key.inGameName })
+            }
+        }, points[it]!!)
+    }))
 
     suspend fun nextRound(nodelay: Boolean) {
         delay(if (nodelay) 0 else 1000)
@@ -227,7 +227,7 @@ class Game(val id: Int, val owner: String) {
         trump = stack.removeFirstOrNull() ?: NOTHINGCARD
 
         val forbidden = if (checkRule(Rules.TRUMP) == "Nur Farben") {
-            listOf(Color.MAGICIAN, Color.FOOL, Color.Special)
+            listOf(Color.MAGICIAN, Color.FOOL, Color.SPECIAL)
         } else {
             listOf()
         }
@@ -300,25 +300,38 @@ class Game(val id: Int, val owner: String) {
             var numberOfLoosingPlayers = 0
             val results = mutableMapOf<String, Int>()
             players.forEach { p ->
-                val amount = if (specialRoles[FunctionalSpecialRole.GAMBLER] == p) {
-                    if (p.predictedCorrectly()) stitchDone[p]!! * 20
-                    else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
-                } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
-                    if (p.predictedCorrectly() && stitchDone[p] == 0) 50
-                    else p.normalPointCalculation().coerceAtMost(20 + 10 * (12 / players.size))
-                } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
-                    if (p.predictedCorrectly()) {
-                        stitchDone[p]!! * 10 + if (stitchDone[p]!! < (12 / players.size)) 0 else 20
-                    } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
-                        5 * stitchDone[p]!!
-                    } else {
-                        -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
+                val done = stitchDone[p]!!
+                val goal = stitchGoals[p]!!
+                val difference = abs(goal - done)
+                val amount = when (p) {
+                    specialRoles[FunctionalSpecialRole.GAMBLER] -> {
+                        if (p.predictedCorrectly()) done * 20
+                        else -20 * abs(difference)
                     }
-                } else if (specialRoles[FunctionalSpecialRole.GREEDY] == p) {
-                    if (stitchDone[p]!! >= stitchGoals[p]!!) 5 * (stitchGoals[p]!! + stitchDone[p]!!)
-                    else -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
-                } else {
-                    p.normalPointCalculation()
+
+                    specialRoles[FunctionalSpecialRole.PESSIMIST] -> {
+                        if (p.predictedCorrectly() && done == 0) 50
+                        else p.normalPointCalculation().coerceAtMost(20 + 10 * (12 / players.size))
+                    }
+
+                    specialRoles[FunctionalSpecialRole.OPTIMIST] -> {
+                        if (p.predictedCorrectly()) {
+                            done * 10 + if (done < (12 / players.size)) 0 else 20
+                        } else if (difference == 1) {
+                            5 * done
+                        } else {
+                            -10 * difference
+                        }
+                    }
+
+                    specialRoles[FunctionalSpecialRole.GREEDY] -> {
+                        if (done >= goal) 5 * (goal + done)
+                        else -10 * difference
+                    }
+
+                    else -> {
+                        p.normalPointCalculation()
+                    }
                 }
 
                 if (amount < 0 && specialRoles[FunctionalSpecialRole.GLEEFUL] != p) {
@@ -367,10 +380,9 @@ class Game(val id: Int, val owner: String) {
             val firstPlayerOfRound = originalOrderForSubround[0]
             val thiefPlayer = specialRoles[FunctionalSpecialRole.THIEF]
             winner = when {
-
                 layedCards[thiefPlayer]?.let {
-                            (it.value == 1.0f && it.color.isNormalColor && rnd.nextInt(0, 2) == 0)
-                        } == true -> thiefPlayer!!
+                    (it.value == 1.0f && it.color.isNormalColor && rnd.nextInt(0, 2) == 0)
+                } == true -> thiefPlayer!!
 
                 layedCards.values.containsAll(
                     listOf(
@@ -444,12 +456,12 @@ class Game(val id: Int, val owner: String) {
         } ?: realCard
         firstCard?.let { fc ->
             if (realCard.color !in setOf(
-                    Color.FOOL, Color.MAGICIAN, Color.Special
+                    Color.FOOL, Color.MAGICIAN, Color.SPECIAL
                 ) && fc.color != card.color && fc.color != Color.MAGICIAN && fc != DRAGON && playerCards.any { it.color == fc.color }
             ) return
         }
-        if (layedCards.values.all { it.color in setOf(Color.FOOL, Color.Special) }) {
-            if (card == DRAGON || card.color != Color.Special && card.color != Color.FOOL) {
+        if (layedCards.values.all { it.color in setOf(Color.FOOL, Color.SPECIAL) }) {
+            if (card == DRAGON || card.color != Color.SPECIAL && card.color != Color.FOOL) {
                 firstCard = card
             }
         }
@@ -662,11 +674,11 @@ class Game(val id: Int, val owner: String) {
 
     companion object {
         val NOTHINGCARD = Card(Color.NOTHING, -1f)
-        val BOMB = Card(Color.Special, 1f)
-        val SEVENPOINTFIVE = Card(Color.Special, 7.5f)
-        val NINEPOINTSEVENFIVE = Card(Color.Special, 9.75f)
-        val FAIRY = Card(Color.Special, 2f)
-        val DRAGON = Card(Color.Special, 3f)
+        val BOMB = Card(Color.SPECIAL, 1f)
+        val SEVENPOINTFIVE = Card(Color.SPECIAL, 7.5f)
+        val NINEPOINTSEVENFIVE = Card(Color.SPECIAL, 9.75f)
+        val FAIRY = Card(Color.SPECIAL, 2f)
+        val DRAGON = Card(Color.SPECIAL, 3f)
         val logger = KotlinLogging.logger {}
         val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
     }
@@ -702,20 +714,23 @@ interface SpecialRole {
 }
 
 enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole {
-    BLASTER("Der Sprengmeister"), HEADFOOL("Der Obernarr"), SERVANT("Der Knecht"), GLEEFUL("Der Schadenfrohe"), PESSIMIST(
-        "Der Pessimist"
-    ),
-    OPTIMIST("Der Optimist"), GAMBLER("Der Gambler"), THIEF("Der Dieb"), GREEDY("Der Gierige")
+    BLASTER("Der Sprengmeister"),
+    HEADFOOL("Der Obernarr"),
+    SERVANT("Der Knecht"),
+    GLEEFUL("Der Schadenfrohe"),
+    PESSIMIST("Der Pessimist"),
+    OPTIMIST("Der Optimist"),
+    GAMBLER("Der Gambler"),
+    THIEF("Der Dieb"),
+    GREEDY("Der Gierige")
 }
 
-enum class ColorPreferenceSpecialRole(override val inGameName: String, val color: Color, val chance: Int) :
-    SpecialRole {
-    WIZARDMASTER("Der Zaubermeister", Color.MAGICIAN, 4), REDSHEEP(
-        "Das rote Schaf", Color.RED, 2
-    ),
-    YELLOWSHEEP("Das gelbe Schaf", Color.YELLOW, 2), GREENSHEEP(
-        "Das grüne Schaf", Color.GREEN, 2
-    ),
+enum class ColorPreferenceSpecialRole
+    (override val inGameName: String, val color: Color, val chance: Int) : SpecialRole {
+    WIZARDMASTER("Der Zaubermeister", Color.MAGICIAN, 4),
+    REDSHEEP("Das rote Schaf", Color.RED, 2),
+    YELLOWSHEEP("Das gelbe Schaf", Color.YELLOW, 2),
+    GREENSHEEP("Das grüne Schaf", Color.GREEN, 2),
     BLUESHEEP("Das blaue Schaf", Color.BLUE, 2)
 }
 

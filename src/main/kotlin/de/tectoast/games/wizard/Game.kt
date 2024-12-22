@@ -312,22 +312,38 @@ class Game(val id: Int, val owner: String) {
             var numberOfLoosingPlayers = 0
             val results = mutableMapOf<String, Int>()
             players.forEach { p ->
-                val amount = if (specialRoles[FunctionalSpecialRole.GAMBLER] == p) {
-                    if (p.predictedCorrectly()) stitchDone[p]!! * 20
-                    else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
-                } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
-                    if (p.predictedCorrectly() && stitchDone[p] == 0) 50
-                    else p.normalPointCalculation().coerceAtMost(20 + 10 * (12 / players.size))
-                } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
-                    if (p.predictedCorrectly()) {
-                        stitchDone[p]!! * 10 + if (stitchDone[p]!! < (12 / players.size)) 0 else 20
-                    } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
-                        5 * stitchDone[p]!!
-                    } else {
-                        -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
+                val done = stitchDone[p]!!
+                val goal = stitchGoals[p]!!
+                val difference = abs(goal - done)
+                val amount = when (p) {
+                    specialRoles[FunctionalSpecialRole.GAMBLER] -> {
+                        if (p.predictedCorrectly()) done * 20
+                        else -20 * abs(difference)
                     }
-                } else {
-                    p.normalPointCalculation()
+
+                    specialRoles[FunctionalSpecialRole.PESSIMIST] -> {
+                        if (p.predictedCorrectly() && done == 0) 50
+                        else p.normalPointCalculation().coerceAtMost(20 + 10 * (12 / players.size))
+                    }
+
+                    specialRoles[FunctionalSpecialRole.OPTIMIST] -> {
+                        if (p.predictedCorrectly()) {
+                            done * 10 + if (done < (12 / players.size)) 0 else 20
+                        } else if (difference == 1) {
+                            5 * done
+                        } else {
+                            -10 * difference
+                        }
+                    }
+
+                    specialRoles[FunctionalSpecialRole.GREEDY] -> {
+                        if (done >= goal) 5 * (goal + done)
+                        else -10 * difference
+                    }
+
+                    else -> {
+                        p.normalPointCalculation()
+                    }
                 }
 
                 if (amount < 0 && specialRoles[FunctionalSpecialRole.GLEEFUL] != p) {
@@ -759,6 +775,8 @@ enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole 
     PESSIMIST("Der Pessimist"),
     OPTIMIST("Der Optimist"),
     GAMBLER("Der Gambler"),
+    THIEF("Der Dieb"),
+    GREEDY("Der Gierige")
 }
 
 enum class ColorPreferenceSpecialRole

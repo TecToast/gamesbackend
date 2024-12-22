@@ -14,12 +14,12 @@ data class NobodyIsPerfectDataFrontend(
 
 @Serializable
 data class NIPQuestion(
-    val name: String,
-    val game: String,
-    val type: String,
-    val url: String,
-    val region: String
+    val question: NIPQData,
+    val answer: NIPQData
 )
+
+@Serializable
+data class NIPQData(val title: String, val image: String? = null, val video: String? = null, val audio: String? = null)
 
 @Serializable
 data class NobodyIsPerfectUser(

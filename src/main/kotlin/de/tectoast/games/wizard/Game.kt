@@ -110,20 +110,19 @@ class Game(val id: Int, val owner: String) {
         broadcast(StitchGoal(name, stitchGoals[name]!!))
     }
 
-    private fun generateOrder(beginningPlayerOffset: Int): List<String> {
-        val direction = if (reversedPlayOrder) -1 else 1
-
-        return buildList {
-            val list = players.toList()
-            for (i in list.indices) {
-                add(list[((i * direction) + beginningPlayerOffset + list.size) % list.size])
-            }
+    private fun generateOrder(beginningPlayerOffset: Int, respectReversedOrder: Boolean): MutableList<String> {
+        val direction = if (respectReversedOrder && reversedPlayOrder) -1 else 1
+        val list = ArrayList<String>(players.size)
+        val pl = players.toList()
+        for (i in pl.indices) {
+            list.add(pl[((i * direction) + beginningPlayerOffset + pl.size) % pl.size])
         }
+        return list
     }
 
-    fun generateStitchOrder() = generateOrder(round - 1)
-    fun generatePlayOrder() = generateOrder(round)
-    fun generateNextPlayOrder(winnerIndex:Int) = generateOrder(winnerIndex)
+    fun generateStitchOrder() = generateOrder(beginningPlayerOffset = round - 1, respectReversedOrder = false)
+    fun generatePlayOrder() = generateOrder(beginningPlayerOffset = round, respectReversedOrder = true)
+    fun generateNextPlayOrder(winnerIndex: Int) = generateOrder(beginningPlayerOffset = winnerIndex, respectReversedOrder = true)
 
     suspend fun checkIfAllPredicted(name: String) {
         broadcast(HasPredicted(name))
@@ -156,7 +155,7 @@ class Game(val id: Int, val owner: String) {
             return
         }
         giveCards(round)
-        roundPlayers = generateStitchOrder().toMutableList()
+        roundPlayers = generateStitchOrder()
         broadcast(Round(round = round, firstCome = roundPlayers[1]))
         broadcast(IsPredict(true))
         originalOrderForSubround = roundPlayers.toList()
@@ -279,7 +278,7 @@ class Game(val id: Int, val owner: String) {
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
      */
-    suspend fun afterSubRound(wasBombUsed: Boolean, stitchValue:Int) {
+    suspend fun afterSubRound(wasBombUsed: Boolean, stitchValue: Int) {
         if (!wasBombUsed) {
             stitchDone.add(winner, stitchValue)
             broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
@@ -372,7 +371,7 @@ class Game(val id: Int, val owner: String) {
             }
             nextRound(false)
         } else {
-            roundPlayers = generateNextPlayOrder(players.indexOf(winner)).toMutableList()
+            roundPlayers = generateNextPlayOrder(players.indexOf(winner))
             originalOrderForSubround = roundPlayers.toList()
             currentPlayer = roundPlayers.removeFirst()
             broadcast(CurrentPlayer(currentPlayer))
@@ -381,14 +380,9 @@ class Game(val id: Int, val owner: String) {
 
     fun evaluateStitch(): Pair<String, Int> {
         // remove blocked players
-        for (i in 0..<players.size) {
-            val playerToCheck = originalOrderForSubround[i]
-            if (!layedCards.contains(playerToCheck)) continue
-
-            val card = layedCards[playerToCheck]!!
-
-            if (card == BLOCKED) {
-                val nextPlayer = originalOrderForSubround[(i + 1) % players.size]
+        for ((index, playerToCheck) in originalOrderForSubround.withIndex()) {
+            if (layedCards[playerToCheck] == BLOCKED) {
+                val nextPlayer = originalOrderForSubround[(index + 1) % players.size]
                 layedCards.remove(nextPlayer)
             }
         }
@@ -397,20 +391,16 @@ class Game(val id: Int, val owner: String) {
         if (layedCards.values.contains(REVERSE)) reversedPlayOrder = !reversedPlayOrder
 
         // calculate stitch value
+        val dragonIngame = layedCards.values.contains(DRAGON)
         var stitchValue = 1
-        for (i in 0..<players.size) {
-            val playerToCheck = originalOrderForSubround[i]
-            if (!layedCards.contains(playerToCheck)) continue
-
-            val card = layedCards[playerToCheck]!!
-
+        originalOrderForSubround.mapNotNull { layedCards[it] }.forEach { card ->
             if (card.value == -1f) stitchValue = -1 // Troll card
             else if (card.value == 14f) stitchValue = 3 // Stonks card
-            else if (card.value == 69f && layedCards.values.contains(DRAGON)) stitchValue = -3 // Dragon deez nuts combination
+            else if (card.value == 69f && dragonIngame) stitchValue = -3 // Dragon deez nuts combination
         }
 
         // calculate stitch winner
-        val firstPlayerOfRound = originalOrderForSubround.filter { layedCards.contains(it) }.first()
+        val firstPlayerOfRound = originalOrderForSubround.first { layedCards.contains(it) }
 
         return when {
             layedCards.values.containsAll(
@@ -419,7 +409,7 @@ class Game(val id: Int, val owner: String) {
                 )
             ) -> layedCards.entries.find { it.value == FAIRY }!!.key
 
-            layedCards.values.contains(DRAGON) -> layedCards.entries.find { it.value == DRAGON }!!.key
+            dragonIngame -> layedCards.entries.find { it.value == DRAGON }!!.key
 
             layedCards.entries.filter { it.value != FAIRY }
                 .all { it.value.color == Color.FOOL } -> layedCards.entries.first { it.value.color == Color.FOOL }.key
@@ -452,7 +442,7 @@ class Game(val id: Int, val owner: String) {
     suspend fun nextPlayer() {
         currentPlayer = roundPlayers.removeFirstOrNull() ?: run {
             if (isPredict) {
-                roundPlayers = generatePlayOrder().toMutableList()
+                roundPlayers = generatePlayOrder()
                 originalOrderForSubround = roundPlayers.toList()
                 isPredict = false
                 broadcast(IsPredict(false))

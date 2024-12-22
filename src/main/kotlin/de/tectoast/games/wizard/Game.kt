@@ -29,6 +29,7 @@ class Game(val id: Int, val owner: String) {
     var roundPlayers = mutableListOf<String>()
     var round = 0
     var isPredict = true
+    var reversedPlayOrder = false
     var originalOrderForSubround = listOf<String>()
     val rules = mutableMapOf<Rules, String>().apply {
         Rules.entries.forEach {
@@ -52,6 +53,14 @@ class Game(val id: Int, val owner: String) {
                 add(NINEPOINTSEVENFIVE)
                 add(FAIRY)
                 add(DRAGON)
+            }
+
+            if (checkRule(Rules.MEMECARDS) == "Aktiviert") {
+                add(DEEZNUTS)
+                add(TROLL)
+                add(STONKS)
+                add(BLOCKED)
+                add(REVERSE)
             }
         }
     }
@@ -101,17 +110,20 @@ class Game(val id: Int, val owner: String) {
         broadcast(StitchGoal(name, stitchGoals[name]!!))
     }
 
-    private fun generateOrder(modifier: Int): List<String> {
+    private fun generateOrder(beginningPlayerOffset: Int): List<String> {
+        val direction = if (reversedPlayOrder) -1 else 1
+
         return buildList {
             val list = players.toList()
             for (i in list.indices) {
-                add(list[(i + round - 1 + modifier) % list.size])
+                add(list[((i * direction) + beginningPlayerOffset + list.size) % list.size])
             }
         }
     }
 
-    fun generateStitchOrder() = generateOrder(0)
-    fun generatePlayOrder() = generateOrder(1)
+    fun generateStitchOrder() = generateOrder(round - 1)
+    fun generatePlayOrder() = generateOrder(round)
+    fun generateNextPlayOrder(winnerIndex:Int) = generateOrder(winnerIndex)
 
     suspend fun checkIfAllPredicted(name: String) {
         broadcast(HasPredicted(name))
@@ -162,7 +174,7 @@ class Game(val id: Int, val owner: String) {
 
     private val rnd = SecureRandom()
 
-    val forcedCards = listOf<Card>()
+    val forcedCards = listOf<Card>(REVERSE)
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>
@@ -267,9 +279,9 @@ class Game(val id: Int, val owner: String) {
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
      */
-    suspend fun afterSubRound(wasBombUsed: Boolean) {
+    suspend fun afterSubRound(wasBombUsed: Boolean, stitchValue:Int) {
         if (!wasBombUsed) {
-            stitchDone.add(winner, 1)
+            stitchDone.add(winner, stitchValue)
             broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
         }
         val wasNinePointsSevenFiveUsed = layedCards.values.any { it.value == 9.75f }
@@ -300,38 +312,22 @@ class Game(val id: Int, val owner: String) {
             var numberOfLoosingPlayers = 0
             val results = mutableMapOf<String, Int>()
             players.forEach { p ->
-                val done = stitchDone[p]!!
-                val goal = stitchGoals[p]!!
-                val difference = abs(goal - done)
-                val amount = when (p) {
-                    specialRoles[FunctionalSpecialRole.GAMBLER] -> {
-                        if (p.predictedCorrectly()) done * 20
-                        else -20 * abs(difference)
+                val amount = if (specialRoles[FunctionalSpecialRole.GAMBLER] == p) {
+                    if (p.predictedCorrectly()) stitchDone[p]!! * 20
+                    else abs(stitchDone[p]!! - stitchGoals[p]!!) * -20
+                } else if (specialRoles[FunctionalSpecialRole.PESSIMIST] == p) {
+                    if (p.predictedCorrectly() && stitchDone[p] == 0) 50
+                    else p.normalPointCalculation().coerceAtMost(20 + 10 * (12 / players.size))
+                } else if (specialRoles[FunctionalSpecialRole.OPTIMIST] == p) {
+                    if (p.predictedCorrectly()) {
+                        stitchDone[p]!! * 10 + if (stitchDone[p]!! < (12 / players.size)) 0 else 20
+                    } else if (abs(stitchDone[p]!! - stitchGoals[p]!!) == 1) {
+                        5 * stitchDone[p]!!
+                    } else {
+                        -10 * abs(stitchDone[p]!! - stitchGoals[p]!!)
                     }
-
-                    specialRoles[FunctionalSpecialRole.PESSIMIST] -> {
-                        if (p.predictedCorrectly() && done == 0) 50
-                        else p.normalPointCalculation().coerceAtMost(20 + 10 * (12 / players.size))
-                    }
-
-                    specialRoles[FunctionalSpecialRole.OPTIMIST] -> {
-                        if (p.predictedCorrectly()) {
-                            done * 10 + if (done < (12 / players.size)) 0 else 20
-                        } else if (difference == 1) {
-                            5 * done
-                        } else {
-                            -10 * difference
-                        }
-                    }
-
-                    specialRoles[FunctionalSpecialRole.GREEDY] -> {
-                        if (done >= goal) 5 * (goal + done)
-                        else -10 * difference
-                    }
-
-                    else -> {
-                        p.normalPointCalculation()
-                    }
+                } else {
+                    p.normalPointCalculation()
                 }
 
                 if (amount < 0 && specialRoles[FunctionalSpecialRole.GLEEFUL] != p) {
@@ -360,12 +356,81 @@ class Game(val id: Int, val owner: String) {
             }
             nextRound(false)
         } else {
-            roundPlayers = players.toMutableList()
-            while (roundPlayers.first() != winner) roundPlayers.add(roundPlayers.removeFirst())
+            roundPlayers = generateNextPlayOrder(players.indexOf(winner)).toMutableList()
             originalOrderForSubround = roundPlayers.toList()
             currentPlayer = roundPlayers.removeFirst()
             broadcast(CurrentPlayer(currentPlayer))
         }
+    }
+
+    fun evaluateStitch(): Pair<String, Int> {
+        // remove blocked players
+        for (i in 0..<players.size) {
+            val playerToCheck = originalOrderForSubround[i]
+            if (!layedCards.contains(playerToCheck)) continue
+
+            val card = layedCards[playerToCheck]!!
+
+            if (card == BLOCKED) {
+                val nextPlayer = originalOrderForSubround[(i + 1) % players.size]
+                layedCards.remove(nextPlayer)
+            }
+        }
+
+        // reverse play order if necessary
+        if (layedCards.values.contains(REVERSE)) reversedPlayOrder = !reversedPlayOrder
+
+        // calculate stitch value
+        var stitchValue = 1
+        for (i in 0..<players.size) {
+            val playerToCheck = originalOrderForSubround[i]
+            if (!layedCards.contains(playerToCheck)) continue
+
+            val card = layedCards[playerToCheck]!!
+
+            if (card.value == -1f) stitchValue = -1 // Troll card
+            else if (card.value == 14f) stitchValue = 3 // Stonks card
+            else if (card.value == 69f && layedCards.values.contains(DRAGON)) stitchValue = -3 // Dragon deez nuts combination
+        }
+
+        // calculate stitch winner
+        val firstPlayerOfRound = originalOrderForSubround.filter { layedCards.contains(it) }.first()
+
+        return when {
+            layedCards.values.containsAll(
+                listOf(
+                    FAIRY, DRAGON
+                )
+            ) -> layedCards.entries.find { it.value == FAIRY }!!.key
+
+            layedCards.values.contains(DRAGON) -> layedCards.entries.find { it.value == DRAGON }!!.key
+
+            layedCards.entries.filter { it.value != FAIRY }
+                .all { it.value.color == Color.FOOL } -> layedCards.entries.first { it.value.color == Color.FOOL }.key
+
+            layedCards.values.any { it.color == Color.MAGICIAN } -> {
+                if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
+                else if (checkRule(Rules.MAGICIAN) == "Mittlerer Zauberer") {
+                    val numberOfWizards = layedCards.entries.count { it.value.color == Color.MAGICIAN }
+                    val winningWizardIndex = (numberOfWizards - 1) / 2
+                    layedCards.entries.filter { it.value.color == Color.MAGICIAN }[winningWizardIndex].key
+                } else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
+            }
+
+            else -> {
+                var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
+                for (i in 1..<players.size) {
+                    val playerToCheck = originalOrderForSubround[i]
+                    if (!layedCards.contains(playerToCheck)) continue
+
+                    val card = layedCards[playerToCheck]!!
+                    if (card.isHigherThan(highest.first)) {
+                        highest = card to playerToCheck
+                    }
+                }
+                highest.second
+            }
+        } to stitchValue
     }
 
     suspend fun nextPlayer() {
@@ -377,48 +442,10 @@ class Game(val id: Int, val owner: String) {
                 broadcast(IsPredict(false))
                 return nextPlayer()
             }
-            val firstPlayerOfRound = originalOrderForSubround[0]
-            val thiefPlayer = specialRoles[FunctionalSpecialRole.THIEF]
-            winner = when {
-                layedCards[thiefPlayer]?.let {
-                    (it.value == 1.0f && it.color.isNormalColor && rnd.nextInt(0, 2) == 0)
-                } == true -> thiefPlayer!!
+            val stitchResult = evaluateStitch()
+            winner = stitchResult.first
 
-                layedCards.values.containsAll(
-                    listOf(
-                        FAIRY, DRAGON
-                    )
-                ) -> layedCards.entries.find { it.value == FAIRY }!!.key
-
-                layedCards.values.contains(DRAGON) -> layedCards.entries.find { it.value == DRAGON }!!.key
-
-                layedCards.entries.filter { it.value != FAIRY }
-                    .all { it.value.color == Color.FOOL } -> layedCards.entries.first { it.value.color == Color.FOOL }.key
-
-                layedCards.values.any { it.color == Color.MAGICIAN } -> {
-                    if (checkRule(Rules.MAGICIAN) == "Letzter Zauberer") layedCards.entries.last { it.value.color == Color.MAGICIAN }.key
-                    else if (checkRule(Rules.MAGICIAN) == "Mittlerer Zauberer") {
-                        val numberOfWizards = layedCards.entries.count { it.value.color == Color.MAGICIAN }
-                        val winningWizardIndex = (numberOfWizards - 1) / 2
-                        layedCards.entries.filter { it.value.color == Color.MAGICIAN }[winningWizardIndex].key
-                    } else layedCards.entries.first { it.value.color == Color.MAGICIAN }.key
-                }
-
-                else -> {
-                    var highest = layedCards[firstPlayerOfRound]!! to firstPlayerOfRound
-                    for (i in 1..<players.size) {
-                        val playerToCheck = originalOrderForSubround[i]
-                        val card = layedCards[playerToCheck]!!
-                        if (card.isHigherThan(highest.first)) {
-                            highest = card to playerToCheck
-                        }
-                    }
-                    highest.second
-                }
-            }
-            val wasBombUsed = layedCards.values.contains(BOMB)
-
-            afterSubRound(wasBombUsed)
+            afterSubRound(layedCards.values.contains(BOMB), stitchResult.second)
             return
         }
         broadcast(CurrentPlayer(currentPlayer))
@@ -674,13 +701,21 @@ class Game(val id: Int, val owner: String) {
 
     companion object {
         val NOTHINGCARD = Card(Color.NOTHING, -1f)
+
         val BOMB = Card(Color.SPECIAL, 1f)
         val SEVENPOINTFIVE = Card(Color.SPECIAL, 7.5f)
         val NINEPOINTSEVENFIVE = Card(Color.SPECIAL, 9.75f)
         val FAIRY = Card(Color.SPECIAL, 2f)
         val DRAGON = Card(Color.SPECIAL, 3f)
+
+        val TROLL = Card(Color.SPECIAL, -1f)
+        val STONKS = Card(Color.SPECIAL, 14f)
+        val DEEZNUTS = Card(Color.SPECIAL, 69f)
+        val BLOCKED = Card(Color.FOOL, 5f)
+        val REVERSE = Card(Color.FOOL, 6f)
+
         val logger = KotlinLogging.logger {}
-        val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE)
+        val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE, TROLL, DEEZNUTS, STONKS)
     }
 }
 
@@ -705,6 +740,9 @@ enum class Rules(val options: List<String>) {
     @SerialName("Spezialkarten")
     SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),
 
+    @SerialName("Memekarten")
+    MEMECARDS(listOf("Aktiviert", "Deaktiviert")),
+
     @SerialName("Spezialrollen")
     SPECIALROLES(listOf("Deaktiviert", "Freie Auswahl", "Vorgegeben", "Geheim")),
 }
@@ -721,8 +759,6 @@ enum class FunctionalSpecialRole(override val inGameName: String) : SpecialRole 
     PESSIMIST("Der Pessimist"),
     OPTIMIST("Der Optimist"),
     GAMBLER("Der Gambler"),
-    THIEF("Der Dieb"),
-    GREEDY("Der Gierige")
 }
 
 enum class ColorPreferenceSpecialRole

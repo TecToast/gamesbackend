@@ -711,8 +711,8 @@ class Game(val id: Int, val owner: String) {
         val TROLL = Card(Color.SPECIAL, -1f)
         val STONKS = Card(Color.SPECIAL, 14f)
         val DEEZNUTS = Card(Color.SPECIAL, 69f)
-        val BLOCKED = Card(Color.FOOL, 5f)
-        val REVERSE = Card(Color.FOOL, 6f)
+        val BLOCKED = Card(Color.FOOL, 6f)
+        val REVERSE = Card(Color.FOOL, 5f)
 
         val logger = KotlinLogging.logger {}
         val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE, TROLL, DEEZNUTS, STONKS)

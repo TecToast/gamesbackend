@@ -174,7 +174,7 @@ class Game(val id: Int, val owner: String) {
 
     private val rnd = SecureRandom()
 
-    val forcedCards = listOf<Card>(REVERSE)
+    val forcedCards = listOf<Card>()
 
     suspend fun giveCards(round: Int) {
         val stack = allCards.shuffled(rnd) as MutableList<Card>

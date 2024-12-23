@@ -48,6 +48,10 @@ sealed class WSMessage {
     data class ChangeStitchPrediction(val value: Int) : WSMessage()
 
     @Serializable
+    @SerialName("VoteForWinner")
+    data class VoteForWinner(val value: String) : WSMessage()
+
+    @Serializable
     @SerialName("ChangeCard")
     data class ChangeCard(val card: Card) : WSMessage()
 
@@ -139,6 +143,10 @@ sealed class WSMessage {
     @Serializable
     @SerialName("SevenPointFiveUsed")
     data object SevenPointFiveUsed : WSMessage()
+
+    @Serializable
+    @SerialName("ShowWinnerPollModal")
+    data class ShowWinnerPollModal(val show: Boolean) : WSMessage()
     
     @Serializable
     @SerialName("SelectedRoles")

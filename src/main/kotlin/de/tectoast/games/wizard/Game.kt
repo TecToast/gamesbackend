@@ -283,10 +283,12 @@ class Game(val id: Int, val owner: String) {
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
      */
-    suspend fun afterSubRound(wasBombUsed: Boolean, stitchValue: Int) {
+    suspend fun afterSubRound(wasBombUsed: Boolean, everybodyPointsUsed: Boolean, stitchValue: Int) {
         if (!wasBombUsed) {
-            stitchDone.add(winner, stitchValue)
-            broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
+            players.filter {(it == winner) xor everybodyPointsUsed}.forEach {
+                    stitchDone.add(it, stitchValue)
+                    broadcast(UpdateDoneStitches(it, stitchDone[it]!!))
+                }
         }
         val wasNinePointsSevenFiveUsed = layedCards.values.any { it.value == 9.75f }
         isSevenPointFiveUsed = layedCards.values.any { it.value == 7.5f }
@@ -478,13 +480,14 @@ class Game(val id: Int, val owner: String) {
             }
             val pollNecessary = evaluateStitch()
             val bombUsed = layedCards.values.contains(BOMB)
+            val everybodyPointsUsed = layedCards.values.contains(EVERYBODYPOINTS)
 
             if (pollNecessary && !bombUsed) { // Wait for poll results
                 broadcast(ShowWinnerPollModal(true))
                 playersRemainingForWinnerVoting.addAll(players)
                 players.forEach { winnerVotingTally[it] = 0 }
             }
-            else afterSubRound(bombUsed, stitchValue) // Proceed normally
+            else afterSubRound(bombUsed, everybodyPointsUsed, stitchValue) // Proceed normally
             return
         }
         broadcast(CurrentPlayer(currentPlayer))
@@ -699,7 +702,7 @@ class Game(val id: Int, val owner: String) {
                     originalOrderForSubround.forEach {
                         winner = if (winnerVotingTally[it]!! > winnerVotingTally[winner]!!) it else winner
                     }
-                    afterSubRound(false, stitchValue)
+                    afterSubRound(layedCards.values.contains(BOMB), layedCards.values.contains(EVERYBODYPOINTS), stitchValue)
                 }
             }
 
@@ -771,6 +774,7 @@ class Game(val id: Int, val owner: String) {
         val DEEZNUTS = Card(Color.SPECIAL, 69f)
         val BLOCKED = Card(Color.FOOL, 6f)
         val REVERSE = Card(Color.FOOL, 5f)
+        val EVERYBODYPOINTS = Card(Color.FOOL, 7f)
         val DEMOCRACY = Card(Color.SPECIAL, 7f)
         val GAMBLING = Card(Color.SPECIAL, 6f)
 

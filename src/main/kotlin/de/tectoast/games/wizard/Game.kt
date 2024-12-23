@@ -402,7 +402,12 @@ class Game(val id: Int, val owner: String) {
         // calculate stitch winner
         val firstPlayerOfRound = originalOrderForSubround.first { layedCards.contains(it) }
 
+        val thiefPlayer = specialRoles[FunctionalSpecialRole.THIEF]
         return when {
+            layedCards[thiefPlayer]?.let {
+                (it.value == 1.0f && it.color.isNormalColor && rnd.nextInt(0, 2) == 0)
+            } == true -> thiefPlayer!!
+
             layedCards.values.containsAll(
                 listOf(
                     FAIRY, DRAGON

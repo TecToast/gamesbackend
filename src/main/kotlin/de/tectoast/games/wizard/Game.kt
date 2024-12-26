@@ -694,14 +694,11 @@ class Game(val id: Int, val owner: String) {
 
                 socket.sendWS(ShowWinnerPollModal(false))
 
-                winnerVotingTally[msg.value] = winnerVotingTally[msg.value]!! + 1
+                winnerVotingTally.add(msg.value, 1)
                 playersRemainingForWinnerVoting.remove(username)
 
                 if (playersRemainingForWinnerVoting.isEmpty()) {
-                    winner = originalOrderForSubround.first()
-                    originalOrderForSubround.forEach {
-                        winner = if (winnerVotingTally[it]!! > winnerVotingTally[winner]!!) it else winner
-                    }
+                    winner = originalOrderForSubround.maxBy { winnerVotingTally[it]!! }
                     afterSubRound(layedCards.values.contains(BOMB), layedCards.values.contains(EVERYBODYPOINTS), stitchValue)
                 }
             }

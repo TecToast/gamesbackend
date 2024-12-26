@@ -24,6 +24,8 @@ class Game(val id: Int, val owner: String) {
     var trump: Card = NOTHINGCARD
     var players = mutableSetOf<String>()
     var playersRemainingForRoleSelection = mutableListOf<String>()
+    var playersRemainingForWinnerVoting = mutableSetOf<String>()
+    var winnerVotingTally = mutableMapOf<String, Int>()
     var phase = GamePhase.LOBBY
     var currentPlayer = "Ofl"
     var roundPlayers = mutableListOf<String>()
@@ -61,6 +63,8 @@ class Game(val id: Int, val owner: String) {
                 add(STONKS)
                 add(BLOCKED)
                 add(REVERSE)
+                add(DEMOCRACY)
+                add(GAMBLING)
             }
         }
     }
@@ -69,6 +73,7 @@ class Game(val id: Int, val owner: String) {
     var isSevenPointFiveUsed = false
     val cardsToChange = mutableMapOf<String, Card>()
     lateinit var winner: String
+    var stitchValue = 0
 
     private fun checkRule(rule: Rules) = rules[rule] ?: rule.options.first()
 
@@ -278,10 +283,12 @@ class Game(val id: Int, val owner: String) {
     /*
     * winner ist hier nie null, sondern gibt immer den Spieler mit dem höchsten gelegten Kartenwert an
      */
-    suspend fun afterSubRound(wasBombUsed: Boolean, stitchValue: Int) {
+    suspend fun afterSubRound(wasBombUsed: Boolean, everybodyPointsUsed: Boolean, stitchValue: Int) {
         if (!wasBombUsed) {
-            stitchDone.add(winner, stitchValue)
-            broadcast(UpdateDoneStitches(winner, stitchDone[winner]!!))
+            players.filter {(it == winner) xor everybodyPointsUsed}.forEach {
+                    stitchDone.add(it, stitchValue)
+                    broadcast(UpdateDoneStitches(it, stitchDone[it]!!))
+                }
         }
         val wasNinePointsSevenFiveUsed = layedCards.values.any { it.value == 9.75f }
         isSevenPointFiveUsed = layedCards.values.any { it.value == 7.5f }
@@ -378,31 +385,25 @@ class Game(val id: Int, val owner: String) {
         }
     }
 
-    fun evaluateStitch(): Pair<String, Int> {
-        // remove blocked players
+    fun filterBlockedPlayers() {
         for ((index, playerToCheck) in originalOrderForSubround.withIndex()) {
             if (layedCards[playerToCheck] == BLOCKED) {
                 val nextPlayer = originalOrderForSubround[(index + 1) % players.size]
                 layedCards.remove(nextPlayer)
             }
         }
+    }
 
-        // reverse play order if necessary
-        if (layedCards.values.contains(REVERSE)) reversedPlayOrder = !reversedPlayOrder
-
-        // calculate stitch value
+    fun findStitchWinnerNormally() {
+        val thiefPlayer = specialRoles[FunctionalSpecialRole.THIEF]
         val dragonIngame = layedCards.values.contains(DRAGON)
-        var stitchValue = 1
-        originalOrderForSubround.mapNotNull { layedCards[it] }.forEach { card ->
-            if (card.value == -1f) stitchValue = -1 // Troll card
-            else if (card.value == 14f) stitchValue = 3 // Stonks card
-            else if (card.value == 69f && dragonIngame) stitchValue = -3 // Dragon deez nuts combination
-        }
-
-        // calculate stitch winner
         val firstPlayerOfRound = originalOrderForSubround.first { layedCards.contains(it) }
 
-        return when {
+        winner = when {
+            layedCards[thiefPlayer]?.let {
+                (it.value == 1.0f && it.color.isNormalColor && rnd.nextInt(0, 2) == 0)
+            } == true -> thiefPlayer!!
+
             layedCards.values.containsAll(
                 listOf(
                     FAIRY, DRAGON
@@ -436,7 +437,36 @@ class Game(val id: Int, val owner: String) {
                 }
                 highest.second
             }
-        } to stitchValue
+        }
+    }
+
+    fun checkForReverseCard() {
+        if (layedCards.values.contains(REVERSE)) reversedPlayOrder = !reversedPlayOrder
+    }
+    fun findStitchEvaluationMethodAndValue() : StitchEvaluationMethod {
+        val dragonIngame = layedCards.values.contains(DRAGON)
+        stitchValue = 1
+        var stitchEvaluationMethod = StitchEvaluationMethod.NORMAL
+        originalOrderForSubround.mapNotNull { layedCards[it] }.forEach { card ->
+            if (card.value == -1f) stitchValue = -1 // Troll card
+            else if (card.value == 14f) stitchValue = 3 // Stonks card
+            else if (card.value == 69f && dragonIngame) stitchValue = -3 // Dragon deez nuts combination
+
+            if (card == GAMBLING) stitchEvaluationMethod = StitchEvaluationMethod.RANDOM
+            else if (card == DEMOCRACY) stitchEvaluationMethod = StitchEvaluationMethod.POLL
+        }
+        return stitchEvaluationMethod
+    }
+
+    fun evaluateStitch() : Boolean {
+        filterBlockedPlayers()
+        checkForReverseCard()
+        val method = findStitchEvaluationMethodAndValue()
+        if (method == StitchEvaluationMethod.POLL) return true
+        else if (method == StitchEvaluationMethod.RANDOM) winner = layedCards.keys.random()
+        else findStitchWinnerNormally()
+
+        return false
     }
 
     suspend fun nextPlayer() {
@@ -448,10 +478,16 @@ class Game(val id: Int, val owner: String) {
                 broadcast(IsPredict(false))
                 return nextPlayer()
             }
-            val stitchResult = evaluateStitch()
-            winner = stitchResult.first
+            val pollNecessary = evaluateStitch()
+            val bombUsed = layedCards.values.contains(BOMB)
+            val everybodyPointsUsed = layedCards.values.contains(EVERYBODYPOINTS)
 
-            afterSubRound(layedCards.values.contains(BOMB), stitchResult.second)
+            if (pollNecessary && !bombUsed) { // Wait for poll results
+                broadcast(ShowWinnerPollModal(true))
+                playersRemainingForWinnerVoting.addAll(players)
+                players.forEach { winnerVotingTally[it] = 0 }
+            }
+            else afterSubRound(bombUsed, everybodyPointsUsed, stitchValue) // Proceed normally
             return
         }
         broadcast(CurrentPlayer(currentPlayer))
@@ -651,10 +687,26 @@ class Game(val id: Int, val owner: String) {
                 layCard(username, msg)
             }
 
+            is VoteForWinner -> {
+                if (!playersRemainingForWinnerVoting.contains(username)) return
+                if (!players.contains(msg.value)) return
+                if (msg.value == username) return
+
+                socket.sendWS(ShowWinnerPollModal(false))
+
+                winnerVotingTally.add(msg.value, 1)
+                playersRemainingForWinnerVoting.remove(username)
+
+                if (playersRemainingForWinnerVoting.isEmpty()) {
+                    winner = originalOrderForSubround.maxBy { winnerVotingTally[it]!! }
+                    afterSubRound(layedCards.values.contains(BOMB), layedCards.values.contains(EVERYBODYPOINTS), stitchValue)
+                }
+            }
+
             is ChangeStitchPrediction -> {
                 if (username != userToChangeStitchPrediction) return
                 if (abs(msg.value) != 1) return
-                if (stitchGoals[username]!! + msg.value !in 0..round) return
+                if (stitchGoals[username]!! + msg.value !in 0..round) return //TODO: reconsider upper bound for predictions
                 socket.sendWS(ShowChangeStitchModal(false))
                 delay(200)
                 val newPrediction = stitchGoals.add(username, msg.value)!!
@@ -719,6 +771,9 @@ class Game(val id: Int, val owner: String) {
         val DEEZNUTS = Card(Color.SPECIAL, 69f)
         val BLOCKED = Card(Color.FOOL, 6f)
         val REVERSE = Card(Color.FOOL, 5f)
+        val EVERYBODYPOINTS = Card(Color.FOOL, 7f)
+        val DEMOCRACY = Card(Color.SPECIAL, 7f)
+        val GAMBLING = Card(Color.SPECIAL, 6f)
 
         val logger = KotlinLogging.logger {}
         val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE, TROLL, DEEZNUTS, STONKS)
@@ -780,4 +835,8 @@ enum class ColorPreferenceSpecialRole
 
 enum class GamePhase {
     LOBBY, ROLESELECTION, RUNNING, FINISHED
+}
+
+enum class StitchEvaluationMethod {
+    NORMAL, RANDOM, POLL
 }

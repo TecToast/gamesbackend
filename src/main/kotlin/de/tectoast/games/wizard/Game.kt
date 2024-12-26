@@ -24,7 +24,7 @@ class Game(val id: Int, val owner: String) {
     var trump: Card = NOTHINGCARD
     var players = mutableSetOf<String>()
     var playersRemainingForRoleSelection = mutableListOf<String>()
-    var playersRemainingForWinnerVoting = mutableListOf<String>()
+    var playersRemainingForWinnerVoting = mutableSetOf<String>()
     var winnerVotingTally = mutableMapOf<String, Int>()
     var phase = GamePhase.LOBBY
     var currentPlayer = "Ofl"

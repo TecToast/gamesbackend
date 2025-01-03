@@ -65,6 +65,8 @@ class Game(val id: Int, val owner: String) {
                 add(REVERSE)
                 add(DEMOCRACY)
                 add(GAMBLING)
+                add(EVERYBODYPOINTS)
+                add(FLEXTAPE)
             }
         }
     }
@@ -389,6 +391,10 @@ class Game(val id: Int, val owner: String) {
         for ((index, playerToCheck) in originalOrderForSubround.withIndex()) {
             if (layedCards[playerToCheck] == BLOCKED) {
                 val nextPlayer = originalOrderForSubround[(index + 1) % players.size]
+                layedCards.remove(nextPlayer)
+            }
+            if (layedCards[playerToCheck] == FLEXTAPE) {
+                val nextPlayer = originalOrderForSubround[(index - 1 + players.size) % players.size]
                 layedCards.remove(nextPlayer)
             }
         }
@@ -774,6 +780,7 @@ class Game(val id: Int, val owner: String) {
         val EVERYBODYPOINTS = Card(Color.FOOL, 7f)
         val DEMOCRACY = Card(Color.SPECIAL, 7f)
         val GAMBLING = Card(Color.SPECIAL, 6f)
+        val FLEXTAPE = Card(Color.FOOL, 8f)
 
         val logger = KotlinLogging.logger {}
         val rainbowCards = setOf(SEVENPOINTFIVE, NINEPOINTSEVENFIVE, TROLL, DEEZNUTS, STONKS)

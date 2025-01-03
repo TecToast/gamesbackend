@@ -394,8 +394,8 @@ class Game(val id: Int, val owner: String) {
                 layedCards.remove(nextPlayer)
             }
             if (layedCards[playerToCheck] == FLEXTAPE) {
-                val nextPlayer = originalOrderForSubround[(index - 1 + players.size) % players.size]
-                layedCards.remove(nextPlayer)
+                val previousPlayer = originalOrderForSubround[(index - 1 + players.size) % players.size]
+                layedCards.remove(previousPlayer)
             }
         }
     }

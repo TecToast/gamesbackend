@@ -9,7 +9,8 @@ data class NobodyIsPerfectDataDB(
 
 @Serializable
 data class NobodyIsPerfectDataFrontend(
-    val questions: List<NIPQuestion>
+    val questions: List<NIPQuestion>,
+    val host: String
 ) : FrontEndBase<NobodyIsPerfectUser>()
 
 @Serializable

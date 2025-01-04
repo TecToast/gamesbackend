@@ -32,6 +32,7 @@ import java.io.File
 import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.seconds
 import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
+import de.tectoast.games.nobodyisperfect.mediaBaseDir as nobodyIsPerfectMedia
 
 lateinit var config: Config
 
@@ -70,7 +71,8 @@ private fun initDirectories() {
     media.mkdir()
     jeopardyMedia = media.resolve("jeopardy")
     jeopardyMedia.mkdir()
-
+    nobodyIsPerfectMedia = media.resolve("nobodyisperfect")
+    nobodyIsPerfectMedia.mkdir()
 }
 
 private val configJson = Json {

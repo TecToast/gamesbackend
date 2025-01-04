@@ -4,14 +4,18 @@ import com.sedmelluq.discord.lavaplayer.player.AudioPlayer
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager
 import com.sedmelluq.discord.lavaplayer.track.playback.MutableAudioFrame
+import de.tectoast.games.badReq
 import de.tectoast.games.createDefaultRoutes
 import de.tectoast.games.db
 import de.tectoast.games.db.NobodyIsPerfectDataDB
 import de.tectoast.games.db.NobodyIsPerfectDataFrontend
 import de.tectoast.games.db.NobodyIsPerfectUser
 import de.tectoast.games.discord.jda
+import de.tectoast.games.jeopardy.fileNotAllowedRegex
+import de.tectoast.games.jeopardy.idRegex
 import de.tectoast.games.musicquiz.playTrack
 import de.tectoast.games.nobodyisperfect.NobodyIsPerfectWSMessage.*
+import de.tectoast.games.readString
 import de.tectoast.games.sessionOrUnauthorized
 import de.tectoast.games.utils.GUILD_ID
 import de.tectoast.games.utils.createDataCache
@@ -19,13 +23,20 @@ import dev.lavalink.youtube.YoutubeAudioSourceManager
 import dev.minn.jda.ktx.coroutines.await
 import dev.minn.jda.ktx.events.listener
 import dev.minn.jda.ktx.messages.reply_
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
+import io.ktor.server.http.content.staticFiles
+import io.ktor.server.request.receiveMultipart
+import io.ktor.server.response.respond
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
+import io.ktor.utils.io.readRemaining
 import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.launch
+import kotlinx.io.readByteArray
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import net.dv8tion.jda.api.audio.AudioSendHandler
@@ -33,6 +44,7 @@ import net.dv8tion.jda.api.entities.UserSnowflake
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
 import org.litote.kmongo.eq
+import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
@@ -42,13 +54,34 @@ private val dataCache =
 
 private val scope = CoroutineScope(Dispatchers.Default)
 
+lateinit var mediaBaseDir: File
+
 fun Route.nobodyIsPerfect() {
     createDefaultRoutes(
         db.nobodyIsPerfect,
         dataCache,
         updateMap = mapOf(NobodyIsPerfectDataDB::questions to NobodyIsPerfectDataFrontend::questions),
-        frontEndMapper = { NobodyIsPerfectDataFrontend(it.questions) },
+        frontEndMapper = { NobodyIsPerfectDataFrontend(it.questions, it.user.toString()) },
         backendSupplier = { NobodyIsPerfectDataDB(emptyList()) })
+    post("/upload") {
+        val session = call.sessionOrUnauthorized() ?: return@post
+        val data = call.receiveMultipart()
+        val id = data.readString("id") ?: return@post call.badReq()
+        val category = data.readString("num") ?: return@post call.badReq()
+        val type = data.readString("type")?.takeIf { it == "Question" || it == "Answer" } ?: return@post call.badReq()
+        setOf(id, category).forEach {
+            idRegex.matchEntire(it) ?: return@post call.badReq()
+        }
+        val path =
+            mediaBaseDir.resolve(session.userId.toString()).resolve(id).resolve(category).resolve(type)
+        path.mkdirs()
+        val fileData = (data.readPart() as? PartData.FileItem) ?: return@post call.badReq()
+        val file = fileData.provider().readRemaining().readByteArray()
+        val resolve = path.resolve(fileData.originalFileName?.replace(fileNotAllowedRegex, "") ?: "file")
+        resolve.writeBytes(file)
+        call.respond(HttpStatusCode.OK, resolve.name)
+    }
+    staticFiles("/media", mediaBaseDir)
     webSocket("/ws/{id}") {
         val id = call.parameters["id"] ?: return@webSocket
         val session = call.sessionOrUnauthorized() ?: return@webSocket
@@ -112,7 +145,7 @@ fun Route.nobodyIsPerfect() {
 
                 is PlayTrackOfQuestion -> {
                     data.questions.getOrNull(msg.questionIndex)?.let {
-                        store.play(it.url)
+                        store.play(it.question.audio ?: return@let)
                     }
                 }
 

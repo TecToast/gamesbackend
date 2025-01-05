@@ -20,7 +20,7 @@ data class NIPQuestion(
 )
 
 @Serializable
-data class NIPQData(val title: String, val image: String? = null, val video: String? = null, val audio: String? = null)
+data class NIPQData(val title: String, val file: String? = null, val audio: String? = null)
 
 @Serializable
 data class NobodyIsPerfectUser(

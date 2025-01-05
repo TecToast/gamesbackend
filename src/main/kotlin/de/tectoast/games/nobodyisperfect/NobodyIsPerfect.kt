@@ -4,9 +4,7 @@ import com.sedmelluq.discord.lavaplayer.player.AudioPlayer
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager
 import com.sedmelluq.discord.lavaplayer.track.playback.MutableAudioFrame
-import de.tectoast.games.badReq
-import de.tectoast.games.createDefaultRoutes
-import de.tectoast.games.db
+import de.tectoast.games.*
 import de.tectoast.games.db.NobodyIsPerfectDataDB
 import de.tectoast.games.db.NobodyIsPerfectDataFrontend
 import de.tectoast.games.db.NobodyIsPerfectUser
@@ -15,22 +13,20 @@ import de.tectoast.games.jeopardy.fileNotAllowedRegex
 import de.tectoast.games.jeopardy.idRegex
 import de.tectoast.games.musicquiz.playTrack
 import de.tectoast.games.nobodyisperfect.NobodyIsPerfectWSMessage.*
-import de.tectoast.games.readString
-import de.tectoast.games.sessionOrUnauthorized
 import de.tectoast.games.utils.GUILD_ID
 import de.tectoast.games.utils.createDataCache
 import dev.lavalink.youtube.YoutubeAudioSourceManager
 import dev.minn.jda.ktx.coroutines.await
 import dev.minn.jda.ktx.events.listener
 import dev.minn.jda.ktx.messages.reply_
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.content.PartData
-import io.ktor.server.http.content.staticFiles
-import io.ktor.server.request.receiveMultipart
-import io.ktor.server.response.respond
+import io.ktor.http.*
+import io.ktor.http.content.*
+import io.ktor.server.http.content.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -141,11 +137,20 @@ fun Route.nobodyIsPerfect() {
 
                 is AcceptAnswers -> {
                     store.acceptingAnswers = msg.state
+                    if(msg.deleteAnswers) {
+                        store.userAnswers.clear()
+                    }
                 }
 
                 is PlayTrackOfQuestion -> {
                     data.questions.getOrNull(msg.questionIndex)?.let {
                         store.play(it.question.audio ?: return@let)
+                    }
+                }
+
+                is PlayTrackOfAnswer -> {
+                    data.questions.getOrNull(msg.questionIndex)?.let {
+                        store.play(it.answer.audio ?: return@let)
                     }
                 }
 
@@ -164,9 +169,10 @@ fun Route.nobodyIsPerfect() {
         if (uid !in data.participants) return reply(
             "Du spielst gerade nicht mit!",
         )
+        if(!store.acceptingAnswers) return reply("Es können derzeit keine Antworten eingereicht werden!")
         store.userAnswers[uid] = answer
         store.hostSession.sendWS(Answer(uid, answer))
-        reply(":)")
+        reply(answer)
     }
 
     jda.listener<SlashCommandInteractionEvent> { e ->
@@ -179,7 +185,7 @@ fun Route.nobodyIsPerfect() {
     jda.listener<CommandAutoCompleteInteractionEvent> { e ->
         if (e.name != "nobodyisperfect") return@listener
         handleEvent(e.guild!!.idLong, e.user.id, e.focusedOption.value) {
-            e.replyChoiceStrings(it).queue()
+            e.replyChoiceStrings(it.ifBlank { "..." }).queue()
         }
     }
 }
@@ -210,11 +216,15 @@ sealed class NobodyIsPerfectWSMessage {
 
     @Serializable
     @SerialName("AcceptAnswers")
-    data class AcceptAnswers(val state: Boolean) : NobodyIsPerfectWSMessage()
+    data class AcceptAnswers(val state: Boolean, val deleteAnswers: Boolean = false) : NobodyIsPerfectWSMessage()
 
     @Serializable
     @SerialName("PlayTrackOfQuestion")
     data class PlayTrackOfQuestion(val questionIndex: Int) : NobodyIsPerfectWSMessage()
+
+    @Serializable
+    @SerialName("PlayTrackOfAnswer")
+    data class PlayTrackOfAnswer(val questionIndex: Int) : NobodyIsPerfectWSMessage()
 
     @Serializable
     @SerialName("PlayYT")

@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource
 import de.tectoast.games.discord.initJDA
 import de.tectoast.games.jeopardy.jeopardy
 import de.tectoast.games.musicquiz.musicQuiz
+import de.tectoast.games.nobodyisperfect.nobodyIsPerfect
 import de.tectoast.games.utils.OAuthExpiringMap
 import de.tectoast.games.utils.OAuthSession
 import de.tectoast.games.wizard.WizardSession
@@ -31,6 +32,7 @@ import java.io.File
 import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.seconds
 import de.tectoast.games.jeopardy.mediaBaseDir as jeopardyMedia
+import de.tectoast.games.nobodyisperfect.mediaBaseDir as nobodyIsPerfectMedia
 
 lateinit var config: Config
 
@@ -69,7 +71,8 @@ private fun initDirectories() {
     media.mkdir()
     jeopardyMedia = media.resolve("jeopardy")
     jeopardyMedia.mkdir()
-
+    nobodyIsPerfectMedia = media.resolve("nobodyisperfect")
+    nobodyIsPerfectMedia.mkdir()
 }
 
 private val configJson = Json {
@@ -141,6 +144,12 @@ fun Application.module() {
                     wizard()
                 }
             }
+            if(config.enabledGames.contains("nobodyisperfect")) {
+                route("/nobodyisperfect") {
+                    install(apiGuard)
+                    nobodyIsPerfect()
+                }
+            }
             get("/mygames") {
                 val session = call.sessionOrNull()
                 if (session == null) {
@@ -175,7 +184,8 @@ data class AuthData(val name: String, val games: List<GameMeta>)
 val allGames = mapOf(
     "jeopardy" to GameMeta("Jeopardy", "/jeopardy/config"),
     "musicquiz" to GameMeta("MusicQuiz", "/musicquiz/config"),
-    "wizard" to GameMeta("Wizard", "/wizard")
+    "wizard" to GameMeta("Wizard", "/wizard"),
+    "nobodyisperfect" to GameMeta("Nobody is perfect", "/nobodyisperfect")
 )
 
 private fun Application.installAuth(config: Config) {
@@ -265,7 +275,7 @@ data class UserSession(
 
 @Serializable
 data class Config(
-    val enabledGames: Set<String> = setOf("jeopardy", "musicquiz", "wizard"),
+    val enabledGames: Set<String> = setOf("jeopardy", "musicquiz", "wizard", "nobodyisperfect"),
     val oauth2Secret: String = "secret",
     val devMode: Boolean = true,
     val discordBotToken: String = "secret",

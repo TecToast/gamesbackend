@@ -32,7 +32,7 @@ fun initJDA(config: Config) {
         config.discordBotToken,
         intents = listOf(GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.GUILD_MEMBERS)
     )
-    if (config.devMode) return
+//    if (config.devMode) return
     jda.listener<ReadyEvent> {
         val guild = jda.getGuildById(GUILD_ID)!!
         guild.upsertCommand(
@@ -40,10 +40,14 @@ fun initJDA(config: Config) {
                 option<String>("quiz", "The type of quiz you want to set the users for", required = true) {
                     choice("Jeopardy", "jeopardy")
                     choice("Music Quiz", "musicquiz")
+                    choice("Nobody is perfect", "nobodyisperfect")
                 }
                 option<String>("name", "The name of the quiz", required = true, autocomplete = true)
             }
         ).queue()
+        guild.upsertCommand("nobodyisperfect", "Your answer to the question").apply {
+            option<String>("answer", "Your answer to the question", required = true, autocomplete = true)
+        }.queue()
     }
     jda.listener<CommandAutoCompleteInteractionEvent> {
         val str = it.focusedOption.value
@@ -104,5 +108,6 @@ fun initJDA(config: Config) {
 inline fun String.parseDatabase(answer: (String) -> Unit) = when (this) {
     "jeopardy" -> db.jeopardy
     "musicquiz" -> db.musicquiz
+    "nobodyisperfect" -> db.nobodyIsPerfect
     else -> null.also { answer("Invalid quiz type.") }
 }

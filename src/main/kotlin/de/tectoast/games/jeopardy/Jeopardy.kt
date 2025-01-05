@@ -17,8 +17,8 @@ import java.io.File
 
 private val dataCache = createDataCache { JeopardyUser(it.avatarUrl, it.effectiveName, null, 0) }
 lateinit var mediaBaseDir: File
-private val idRegex = Regex("[a-zA-Z0-9]+")
-private val fileNotAllowedRegex = Regex("[^.a-zA-Z0-9]")
+val idRegex = Regex("[a-zA-Z0-9]+")
+val fileNotAllowedRegex = Regex("[^.a-zA-Z0-9]")
 
 fun Route.jeopardy() {
     createDefaultRoutes(db.jeopardy, dataCache, updateMap = mapOf(

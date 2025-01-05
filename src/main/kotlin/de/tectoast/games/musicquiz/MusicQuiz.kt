@@ -235,7 +235,7 @@ suspend fun AudioPlayerManager.playTrack(query: String, player: AudioPlayer): Au
     return track
 }
 
-fun WebSocketServerSession.sendWS(msg: MusicQuizWSMessage) = scope.launch {
+private fun WebSocketServerSession.sendWS(msg: MusicQuizWSMessage) = scope.launch {
     sendSerialized(msg)
 }
 

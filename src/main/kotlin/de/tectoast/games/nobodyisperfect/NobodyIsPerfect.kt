@@ -86,7 +86,7 @@ fun Route.nobodyIsPerfect() {
     webSocket("/ws/{id}") {
         val id = call.parameters["id"] ?: return@webSocket
         val session = call.sessionOrUnauthorized() ?: return@webSocket
-        val data = db.nobodyIsPerfect.findOne(NobodyIsPerfectDataDB::id eq id) ?: return@webSocket close()
+        val data = db.nobodyIsPerfect.findOne(NobodyIsPerfectDataDB::user eq session.userId, NobodyIsPerfectDataDB::id eq id) ?: return@webSocket close()
         val store = botStore.getOrPut(id) {
             val manager = DefaultAudioPlayerManager()
             manager.registerSourceManager(YoutubeAudioSourceManager(true))
@@ -146,7 +146,7 @@ fun Route.nobodyIsPerfect() {
                         store.userAnswers.forEach { (uid, answer) ->
                             db.perfectAnswers.updateOne(
                                 and(
-                                    PerfectAnswers::gameID eq id, PerfectAnswers::uid eq uid.toLong(),
+                                    PerfectAnswers::host eq session.userId, PerfectAnswers::gameID eq id, PerfectAnswers::uid eq uid.toLong(),
                                     PerfectAnswers::questionIndex eq msg.saveIndex
                                 ), set(PerfectAnswers::answer setTo answer), upsert()
                             )

@@ -28,4 +28,4 @@ data class NobodyIsPerfectUser(
 )
 
 @Serializable
-data class PerfectAnswers(val gameID: String, val uid: Long, val questionIndex: Int, val answer: String)
+data class PerfectAnswers(val host: Long, val gameID: String, val uid: Long, val questionIndex: Int, val answer: String)

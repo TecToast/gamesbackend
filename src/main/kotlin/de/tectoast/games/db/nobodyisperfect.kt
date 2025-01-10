@@ -26,3 +26,6 @@ data class NIPQData(val title: String, val file: String? = null, val audio: Stri
 data class NobodyIsPerfectUser(
     val avatarUrl: String, val displayName: String, val points: Int
 )
+
+@Serializable
+data class PerfectAnswers(val gameID: String, val uid: Long, val questionIndex: Int, val answer: String)

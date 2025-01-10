@@ -8,6 +8,7 @@ import de.tectoast.games.*
 import de.tectoast.games.db.NobodyIsPerfectDataDB
 import de.tectoast.games.db.NobodyIsPerfectDataFrontend
 import de.tectoast.games.db.NobodyIsPerfectUser
+import de.tectoast.games.db.PerfectAnswers
 import de.tectoast.games.discord.jda
 import de.tectoast.games.jeopardy.fileNotAllowedRegex
 import de.tectoast.games.jeopardy.idRegex
@@ -39,7 +40,10 @@ import net.dv8tion.jda.api.audio.AudioSendHandler
 import net.dv8tion.jda.api.entities.UserSnowflake
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
+import org.litote.kmongo.and
 import org.litote.kmongo.eq
+import org.litote.kmongo.set
+import org.litote.kmongo.setTo
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
@@ -137,7 +141,17 @@ fun Route.nobodyIsPerfect() {
 
                 is AcceptAnswers -> {
                     store.acceptingAnswers = msg.state
-                    if(msg.deleteAnswers) {
+                    if (msg.safeIndex >= 0) {
+                        store.userAnswers.forEach { (uid, answer) ->
+                            db.perfectAnswers.updateOne(
+                                and(
+                                    PerfectAnswers::gameID eq id, PerfectAnswers::uid eq uid.toLong(),
+                                    PerfectAnswers::questionIndex eq msg.safeIndex
+                                ), set(PerfectAnswers::answer setTo answer)
+                            )
+                        }
+                    }
+                    if (msg.deleteAnswers) {
                         store.userAnswers.clear()
                     }
                 }
@@ -157,6 +171,7 @@ fun Route.nobodyIsPerfect() {
                 is PlayYT -> {
                     store.play(msg.yt)
                 }
+
                 else -> {}
             }
         }
@@ -169,7 +184,7 @@ fun Route.nobodyIsPerfect() {
         if (uid !in data.participants) return reply(
             "Du spielst gerade nicht mit!",
         )
-        if(!store.acceptingAnswers) return reply("Es können derzeit keine Antworten eingereicht werden!")
+        if (!store.acceptingAnswers) return reply("Es können derzeit keine Antworten eingereicht werden!")
         store.userAnswers[uid] = answer
         store.hostSession.sendWS(Answer(uid, answer))
         reply(answer)
@@ -177,7 +192,9 @@ fun Route.nobodyIsPerfect() {
 
     jda.listener<SlashCommandInteractionEvent> { e ->
         if (e.name != "nobodyisperfect") return@listener
-        val answer = e.getOption("answer")?.asString ?: return@listener e.reply_("Bitte gib eine Antwort an!", ephemeral = true).queue()
+        val answer =
+            e.getOption("answer")?.asString ?: return@listener e.reply_("Bitte gib eine Antwort an!", ephemeral = true)
+                .queue()
         handleEvent(e.guild!!.idLong, e.user.id, answer) {
             e.reply_(it, ephemeral = true).queue()
         }
@@ -216,7 +233,8 @@ sealed class NobodyIsPerfectWSMessage {
 
     @Serializable
     @SerialName("AcceptAnswers")
-    data class AcceptAnswers(val state: Boolean, val deleteAnswers: Boolean = false) : NobodyIsPerfectWSMessage()
+    data class AcceptAnswers(val state: Boolean, val deleteAnswers: Boolean = false, val safeIndex: Int = -1) :
+        NobodyIsPerfectWSMessage()
 
     @Serializable
     @SerialName("PlayTrackOfQuestion")

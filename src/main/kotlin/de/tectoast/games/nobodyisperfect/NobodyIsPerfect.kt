@@ -44,6 +44,7 @@ import org.litote.kmongo.and
 import org.litote.kmongo.eq
 import org.litote.kmongo.set
 import org.litote.kmongo.setTo
+import org.litote.kmongo.upsert
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
@@ -141,13 +142,13 @@ fun Route.nobodyIsPerfect() {
 
                 is AcceptAnswers -> {
                     store.acceptingAnswers = msg.state
-                    if (msg.safeIndex >= 0) {
+                    if (msg.saveIndex >= 0) {
                         store.userAnswers.forEach { (uid, answer) ->
                             db.perfectAnswers.updateOne(
                                 and(
                                     PerfectAnswers::gameID eq id, PerfectAnswers::uid eq uid.toLong(),
-                                    PerfectAnswers::questionIndex eq msg.safeIndex
-                                ), set(PerfectAnswers::answer setTo answer)
+                                    PerfectAnswers::questionIndex eq msg.saveIndex
+                                ), set(PerfectAnswers::answer setTo answer), upsert()
                             )
                         }
                     }
@@ -233,7 +234,7 @@ sealed class NobodyIsPerfectWSMessage {
 
     @Serializable
     @SerialName("AcceptAnswers")
-    data class AcceptAnswers(val state: Boolean, val deleteAnswers: Boolean = false, val safeIndex: Int = -1) :
+    data class AcceptAnswers(val state: Boolean, val deleteAnswers: Boolean = false, val saveIndex: Int = -1) :
         NobodyIsPerfectWSMessage()
 
     @Serializable

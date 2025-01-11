@@ -40,11 +40,8 @@ import net.dv8tion.jda.api.audio.AudioSendHandler
 import net.dv8tion.jda.api.entities.UserSnowflake
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
-import org.litote.kmongo.and
-import org.litote.kmongo.eq
-import org.litote.kmongo.set
-import org.litote.kmongo.setTo
-import org.litote.kmongo.upsert
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException
+import org.litote.kmongo.*
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
@@ -86,7 +83,9 @@ fun Route.nobodyIsPerfect() {
     webSocket("/ws/{id}") {
         val id = call.parameters["id"] ?: return@webSocket
         val session = call.sessionOrUnauthorized() ?: return@webSocket
-        val data = db.nobodyIsPerfect.findOne(NobodyIsPerfectDataDB::user eq session.userId, NobodyIsPerfectDataDB::id eq id) ?: return@webSocket close()
+        val data =
+            db.nobodyIsPerfect.findOne(NobodyIsPerfectDataDB::user eq session.userId, NobodyIsPerfectDataDB::id eq id)
+                ?: return@webSocket close()
         val store = botStore.getOrPut(id) {
             val manager = DefaultAudioPlayerManager()
             manager.registerSourceManager(YoutubeAudioSourceManager(true))
@@ -106,7 +105,10 @@ fun Route.nobodyIsPerfect() {
                     val member = guild.retrieveMember(UserSnowflake.fromId(session.userId))
                         .await()
                     member.voiceState?.channel?.let { channel ->
-                        guild.audioManager.openAudioConnection(channel)
+                        try {
+                            guild.audioManager.openAudioConnection(channel)
+                        } catch (_: InsufficientPermissionException) {
+                        }
                     }
                     guildToQuiz[guild.idLong] = id
                     store.hostSession = this
@@ -146,7 +148,9 @@ fun Route.nobodyIsPerfect() {
                         store.userAnswers.forEach { (uid, answer) ->
                             db.perfectAnswers.updateOne(
                                 and(
-                                    PerfectAnswers::host eq session.userId, PerfectAnswers::gameID eq id, PerfectAnswers::uid eq uid.toLong(),
+                                    PerfectAnswers::host eq session.userId,
+                                    PerfectAnswers::gameID eq id,
+                                    PerfectAnswers::uid eq uid.toLong(),
                                     PerfectAnswers::questionIndex eq msg.saveIndex
                                 ), set(PerfectAnswers::answer setTo answer), upsert()
                             )
@@ -203,7 +207,8 @@ fun Route.nobodyIsPerfect() {
     jda.listener<CommandAutoCompleteInteractionEvent> { e ->
         if (e.name != "nobodyisperfect") return@listener
         handleEvent(e.guild!!.idLong, e.user.id, e.focusedOption.value) {
-            e.replyChoiceStrings(it.ifBlank { "..." }).queue()
+            if (it.length <= 100)
+                e.replyChoiceStrings(it.ifBlank { "..." }).queue()
         }
     }
 }

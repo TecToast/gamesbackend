@@ -71,7 +71,6 @@ class OAuthExpiringMap<D : OAuthSession, V>(
                     append("client_secret", clientSecret)
                 }) {
             }.bodyAsText()
-            println("===============\n$res\n================")
             response = webJSON.decodeFromString(res)!!
             @Suppress("UNCHECKED_CAST")
             call.sessions.set<S>(

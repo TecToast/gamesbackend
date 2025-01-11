@@ -23,7 +23,7 @@ val logger = KotlinLogging.logger {}
 
 fun Route.wizard() {
 
-    staticFiles("/cardimages", File("cards/wizard"), index = null) {
+    staticFiles("/cardimages", File("/app/cards/wizard"), index = null) {
         cacheControl {
             listOf(CacheControl.MaxAge(365 * 24 * 60 * 60))
         }

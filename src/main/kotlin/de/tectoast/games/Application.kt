@@ -55,11 +55,11 @@ val nameCache by lazy {
 }
 
 fun main() {
-    config = loadConfig("config.json") { Config() }
+    config = loadConfig(System.getenv("GAMESBACKEND_CONFIG_FILE")) { Config() }
     initDirectories()
     initJDA(config)
     if (config.mysqlUrl != "secret") {
-        initMongo()
+        initMongo(config.mongoDb)
         discordAuthDB = Database.connect(HikariDataSource(HikariConfig().apply { jdbcUrl = config.mysqlUrl }))
     }
     embeddedServer(CIO, port = 9934, host = "0.0.0.0", module = Application::module)
@@ -67,7 +67,7 @@ fun main() {
 }
 
 private fun initDirectories() {
-    val media = File("media")
+    val media = File("/app/media")
     media.mkdir()
     jeopardyMedia = media.resolve("jeopardy")
     jeopardyMedia.mkdir()
@@ -106,7 +106,6 @@ fun Application.module() {
                         call.respondRedirect("/error/notwhitelisted")
                         return@get
                     }
-                    println(principal)
                     call.sessions.set(
                         UserSession(
                             accessToken,
@@ -138,13 +137,13 @@ fun Application.module() {
                     musicQuiz()
                 }
             }
-            if(config.enabledGames.contains("wizard")) {
+            if (config.enabledGames.contains("wizard")) {
                 route("/wizard") {
                     install(apiGuard)
                     wizard()
                 }
             }
-            if(config.enabledGames.contains("nobodyisperfect")) {
+            if (config.enabledGames.contains("nobodyisperfect")) {
                 route("/nobodyisperfect") {
                     install(apiGuard)
                     nobodyIsPerfect()
@@ -157,10 +156,13 @@ fun Application.module() {
                     return@get
                 }
                 call.respond(
-                    if (session.userId == 0L) AuthData("TestUser", allGames.entries.mapNotNull { en -> en.value.takeIf { en.key in config.enabledGames } }) else
+                    if (session.userId == 0L) AuthData(
+                        "TestUser",
+                        allGames.entries.mapNotNull { en -> en.value.takeIf { en.key in config.enabledGames } }) else
                         AuthData(
                             nameCache.get(call, session),
-                            config.permissions[session.userId]?.mapNotNull { if(it in config.enabledGames) allGames[it] else null } ?: emptyList()
+                            config.permissions[session.userId]?.mapNotNull { if (it in config.enabledGames) allGames[it] else null }
+                                ?: emptyList()
                         )
                 )
             }
@@ -281,5 +283,11 @@ data class Config(
     val discordBotToken: String = "secret",
     val mysqlUrl: String = "secret",
     val permissions: Map<Long, Set<String>> = emptyMap(),
+    val mongoDb: MongoConfig = MongoConfig()
 )
 
+@Serializable
+data class MongoConfig(
+    val url: String = "",
+    val dbName: String = "games"
+)

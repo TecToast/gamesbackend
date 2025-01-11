@@ -10,13 +10,11 @@ import org.litote.kmongo.serialization.configuration
 
 val db: MongoGames get() = delegateDb ?: error("MongoDB not initialized!")
 
-private const val DEFAULT_DB_URL = "mongodb://florirp5.fritz.box:27017/"
-private const val DEFAULT_DB_NAME = "games"
 private var delegateDb: MongoGames? = null
 
-fun initMongo(dbUrl: String = DEFAULT_DB_URL, dbName: String = DEFAULT_DB_NAME) {
+fun initMongo(config: MongoConfig) {
     delegateDb?.let { error("MongoDB already initialized!") }
-    delegateDb = MongoGames(dbUrl, dbName)
+    delegateDb = MongoGames(config.url, config.dbName)
 }
 
 class MongoGames(dbUrl: String, dbName: String) {

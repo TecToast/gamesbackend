@@ -10,6 +10,7 @@ plugins {
     id("io.ktor.plugin") version "2.3.12"
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.20"
     id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("com.google.cloud.tools.jib") version "3.4.4"
 }
 
 group = "de.tectoast"
@@ -20,6 +21,24 @@ application {
 
     val isDevelopment: Boolean = project.ext.has("development")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")
+}
+
+jib {
+    from {
+        platforms {
+            platform {
+                os = "linux"
+                architecture = "arm64"
+            }
+        }
+    }
+    to {
+        image = "tectoast/gamesbackend"
+    }
+    container {
+        mainClass = "de.tectoast.games.ApplicationKt"
+    }
+
 }
 
 tasks.withType<Jar> {

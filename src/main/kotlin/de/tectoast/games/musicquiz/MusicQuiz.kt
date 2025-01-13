@@ -23,12 +23,9 @@ import dev.minn.jda.ktx.coroutines.await
 import dev.minn.jda.ktx.events.listener
 import dev.minn.jda.ktx.interactions.components.Modal
 import dev.minn.jda.ktx.messages.reply_
-import io.ktor.server.routing.Route
-import io.ktor.server.websocket.WebSocketServerSession
-import io.ktor.server.websocket.receiveDeserialized
-import io.ktor.server.websocket.sendSerialized
-import io.ktor.server.websocket.webSocket
-import io.ktor.websocket.close
+import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
@@ -44,7 +41,6 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent
 import org.litote.kmongo.eq
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.collections.get
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -54,7 +50,8 @@ private val dataCache =
 private val scope = CoroutineScope(Dispatchers.Default)
 
 fun Route.musicQuiz() {
-    createDefaultRoutes(db.musicquiz,
+    createDefaultRoutes(
+        db.musicquiz,
         dataCache,
         updateMap = mapOf(MusicQuizDataDB::tracks to MusicQuizDataFrontend::tracks),
         frontEndMapper = { MusicQuizDataFrontend(it.tracks) },
@@ -172,7 +169,8 @@ fun Route.musicQuiz() {
         if (e.modalId == "guess") {
             val u = e.user.id
             val id = guildToQuiz[e.guild?.idLong]
-            val store = botStore[id] ?: return@listener e.reply_("Currently, no game is active.", ephemeral = true).queue()
+            val store =
+                botStore[id] ?: return@listener e.reply_("Currently, no game is active.", ephemeral = true).queue()
             val s = e.getValue("track")!!.asString + "\nSpiel: " + e.getValue("game")!!.asString
             store.userGuesses[u] = s
             store.hostSession.sendWS(Guess(u, s))

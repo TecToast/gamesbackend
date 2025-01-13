@@ -21,10 +21,15 @@ val idRegex = Regex("[a-zA-Z0-9]+")
 val fileNotAllowedRegex = Regex("[^.a-zA-Z0-9]")
 
 fun Route.jeopardy() {
-    createDefaultRoutes(db.jeopardy, dataCache, updateMap = mapOf(
-        JeopardyDataDB::categories to JeopardyDataFrontend::categories,
-        JeopardyDataDB::jokers to JeopardyDataFrontend::jokers
-    ), frontEndMapper = { JeopardyDataFrontend(it.categories, it.jokers, it.user.toString()) }, onEachUser = { u -> u.jokers = jokers }) {
+    createDefaultRoutes(
+        db.jeopardy,
+        dataCache,
+        updateMap = mapOf(
+            JeopardyDataDB::categories to JeopardyDataFrontend::categories,
+            JeopardyDataDB::jokers to JeopardyDataFrontend::jokers
+        ),
+        frontEndMapper = { JeopardyDataFrontend(it.categories, it.jokers, it.user.toString()) },
+        onEachUser = { u -> u.jokers = jokers }) {
         JeopardyDataDB(
             emptyMap(), listOf("R", "S")
         )

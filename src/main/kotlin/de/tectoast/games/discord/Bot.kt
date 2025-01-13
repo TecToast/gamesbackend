@@ -27,7 +27,7 @@ val jda by lazy { delegateJda ?: error("JDA not initialized!") }
 private var delegateJda: JDA? = null
 
 fun initJDA(config: Config) {
-    if(config.discordBotToken == "secret") return
+    if (config.discordBotToken == "secret") return
     delegateJda = default(
         config.discordBotToken,
         intents = listOf(GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.GUILD_MEMBERS)

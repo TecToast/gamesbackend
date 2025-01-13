@@ -33,6 +33,7 @@ object SocketManager {
 suspend fun String.send(message: WSMessage) {
     SocketManager.send(this, message)
 }
+
 suspend fun WebSocketServerSession.sendWS(message: WSMessage) {
     sendSerialized(message)
 }

@@ -7,14 +7,15 @@ import de.tectoast.games.sessionOrNull
 import de.tectoast.games.wizard.model.GameData
 import de.tectoast.games.wizard.model.WSMessage
 import de.tectoast.games.wizard.model.WSMessage.*
-import io.ktor.http.CacheControl
-import io.ktor.serialization.deserialize
-import io.ktor.server.http.content.staticFiles
+import io.ktor.http.*
+import io.ktor.serialization.*
+import io.ktor.server.http.content.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import kotlinx.serialization.Serializable
 import mu.KotlinLogging
 import java.io.File
+
 @Serializable
 data class WizardSession(val token: String)
 

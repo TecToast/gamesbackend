@@ -147,14 +147,14 @@ sealed class WSMessage {
     @Serializable
     @SerialName("ShowWinnerPollModal")
     data class ShowWinnerPollModal(val show: Boolean) : WSMessage()
-    
+
     @Serializable
     @SerialName("SelectedRoles")
-    data class SelectedRoles(val roles : Map<String, String>) : WSMessage()
+    data class SelectedRoles(val roles: Map<String, String>) : WSMessage()
 
     @Serializable
     @SerialName("CurrentRoleSelectingPlayer")
-    data class CurrentRoleSelectingPlayer(val currentPlayer : String) : WSMessage()
+    data class CurrentRoleSelectingPlayer(val currentPlayer: String) : WSMessage()
 
 }
 

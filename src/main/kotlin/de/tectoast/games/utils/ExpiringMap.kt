@@ -4,18 +4,15 @@ import de.tectoast.games.discord.jda
 import de.tectoast.games.httpClient
 import de.tectoast.games.webJSON
 import dev.minn.jda.ktx.coroutines.await
-import io.ktor.client.call.body
-import io.ktor.client.request.forms.submitForm
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.parameters
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.sessions.sessions
-import io.ktor.server.sessions.set
+import io.ktor.client.request.forms.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.sessions.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import net.dv8tion.jda.api.entities.Member
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -63,7 +60,8 @@ class OAuthExpiringMap<D : OAuthSession, V>(
             var response: AccessTokenResponse? = null
 
             // Fetch new access token
-            val res = httpClient.submitForm("https://discord.com/api/v10/oauth2/token",
+            val res = httpClient.submitForm(
+                "https://discord.com/api/v10/oauth2/token",
                 formParameters = parameters {
                     append("grant_type", "refresh_token")
                     append("refresh_token", data.refreshToken)

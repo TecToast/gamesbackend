@@ -3,7 +3,6 @@ package de.tectoast.games.db
 import kotlinx.serialization.Serializable
 
 
-
 @Serializable
 data class JeopardyDataFrontend(
     val categories: Map<String, Map<String, JeopardyQuestion>>,

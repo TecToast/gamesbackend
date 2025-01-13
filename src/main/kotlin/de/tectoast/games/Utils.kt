@@ -112,7 +112,8 @@ inline fun <B : BackendBase, reified F : FrontEndBase<U>, U> Route.createDefault
     post("/create") {
         val session = call.sessionOrUnauthorized() ?: return@post
         val data = call.receiveText()
-        call.respond(runCatching {
+        call.respond(
+            runCatching {
             coll.insertOne(
                 backendSupplier().apply {
                     user = session.userId
@@ -127,7 +128,8 @@ inline fun <B : BackendBase, reified F : FrontEndBase<U>, U> Route.createDefault
     post("/update/{id}") {
         val data = call.findQuizData(coll) ?: return@post
         val newData = call.receive<F>()
-        call.respond(runCatching {
+        call.respond(
+            runCatching {
             coll.updateOne(
                 and(Filters.eq("user", data.user), Filters.eq("id", data.id)), set(
                     *updateMap.map { (backend, frontend) ->

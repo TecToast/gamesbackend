@@ -129,7 +129,8 @@ class Game(val id: Int, val owner: String) {
 
     fun generateStitchOrder() = generateOrder(beginningPlayerOffset = round - 1, respectReversedOrder = false)
     fun generatePlayOrder() = generateOrder(beginningPlayerOffset = round, respectReversedOrder = true)
-    fun generateNextPlayOrder(winnerIndex: Int) = generateOrder(beginningPlayerOffset = winnerIndex, respectReversedOrder = true)
+    fun generateNextPlayOrder(winnerIndex: Int) =
+        generateOrder(beginningPlayerOffset = winnerIndex, respectReversedOrder = true)
 
     suspend fun checkIfAllPredicted(name: String) {
         broadcast(HasPredicted(name))
@@ -287,10 +288,10 @@ class Game(val id: Int, val owner: String) {
      */
     suspend fun afterSubRound(wasBombUsed: Boolean, everybodyPointsUsed: Boolean, stitchValue: Int) {
         if (!wasBombUsed) {
-            players.filter {(it == winner) xor everybodyPointsUsed}.forEach {
-                    stitchDone.add(it, stitchValue)
-                    broadcast(UpdateDoneStitches(it, stitchDone[it]!!))
-                }
+            players.filter { (it == winner) xor everybodyPointsUsed }.forEach {
+                stitchDone.add(it, stitchValue)
+                broadcast(UpdateDoneStitches(it, stitchDone[it]!!))
+            }
         }
         val wasNinePointsSevenFiveUsed = layedCards.values.any { it.value == 9.75f }
         isSevenPointFiveUsed = layedCards.values.any { it.value == 7.5f }
@@ -449,7 +450,8 @@ class Game(val id: Int, val owner: String) {
     fun checkForReverseCard() {
         if (layedCards.values.contains(REVERSE)) reversedPlayOrder = !reversedPlayOrder
     }
-    fun findStitchEvaluationMethodAndValue() : StitchEvaluationMethod {
+
+    fun findStitchEvaluationMethodAndValue(): StitchEvaluationMethod {
         val dragonIngame = layedCards.values.contains(DRAGON)
         stitchValue = 1
         var stitchEvaluationMethod = StitchEvaluationMethod.NORMAL
@@ -464,7 +466,7 @@ class Game(val id: Int, val owner: String) {
         return stitchEvaluationMethod
     }
 
-    fun evaluateStitch() : Boolean {
+    fun evaluateStitch(): Boolean {
         filterBlockedPlayers()
         checkForReverseCard()
         val method = findStitchEvaluationMethodAndValue()
@@ -492,8 +494,7 @@ class Game(val id: Int, val owner: String) {
                 broadcast(ShowWinnerPollModal(true))
                 playersRemainingForWinnerVoting.addAll(players)
                 players.forEach { winnerVotingTally[it] = 0 }
-            }
-            else afterSubRound(bombUsed, everybodyPointsUsed, stitchValue) // Proceed normally
+            } else afterSubRound(bombUsed, everybodyPointsUsed, stitchValue) // Proceed normally
             return
         }
         broadcast(CurrentPlayer(currentPlayer))
@@ -675,6 +676,7 @@ class Game(val id: Int, val owner: String) {
                 if (!isPredict) return
                 val default = checkRule(Rules.PREDICTION) == "Nacheinander"
                 if (default && username != currentPlayer) return
+                if (msg.goal < 0 || msg.goal > round + 3) return
                 stitchGoals[username] = msg.goal
                 stitchDone[username] = 0
                 if (default) {
@@ -705,14 +707,18 @@ class Game(val id: Int, val owner: String) {
 
                 if (playersRemainingForWinnerVoting.isEmpty()) {
                     winner = originalOrderForSubround.maxBy { winnerVotingTally[it]!! }
-                    afterSubRound(layedCards.values.contains(BOMB), layedCards.values.contains(EVERYBODYPOINTS), stitchValue)
+                    afterSubRound(
+                        layedCards.values.contains(BOMB),
+                        layedCards.values.contains(EVERYBODYPOINTS),
+                        stitchValue
+                    )
                 }
             }
 
             is ChangeStitchPrediction -> {
                 if (username != userToChangeStitchPrediction) return
                 if (abs(msg.value) != 1) return
-                if (stitchGoals[username]!! + msg.value !in 0..round) return //TODO: reconsider upper bound for predictions
+                if (stitchGoals[username]!! + msg.value !in 0..round + 2) return //TODO: reconsider upper bound for predictions
                 socket.sendWS(ShowChangeStitchModal(false))
                 delay(200)
                 val newPrediction = stitchGoals.add(username, msg.value)!!
@@ -800,10 +806,10 @@ enum class Rules(val options: List<String>) {
     ),
 
     @SerialName("Ansage")
-    PREDICTION(listOf("Nacheinander", "Blind")),
+    PREDICTION(listOf("Blind", "Nacheinander")),
 
     @SerialName("Trumpf")
-    TRUMP(listOf("Normal", "Nur Farben")),
+    TRUMP(listOf("Nur Farben", "Normal")),
 
     @SerialName("Spezialkarten")
     SPECIALCARDS(listOf("Aktiviert", "Deaktiviert")),

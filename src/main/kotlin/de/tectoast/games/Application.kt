@@ -54,8 +54,10 @@ val nameCache by lazy {
     }
 }
 
+val configPath get() = System.getenv("GAMESBACKEND_CONFIG_FILE") ?: "config.json"
+
 fun main() {
-    config = loadConfig(System.getenv("GAMESBACKEND_CONFIG_FILE")) { Config() }
+    config = loadConfig(configPath) { Config() }
     initDirectories()
     initJDA(config)
     if (config.mysqlUrl != "secret") {
@@ -169,7 +171,7 @@ fun Application.module() {
             get("/reloadconfig") {
                 val session = call.sessionOrNull() ?: return@get call.respond(HttpStatusCode.NotFound)
                 if (session.userId != 175910318608744448) return@get call.respond(HttpStatusCode.NotFound)
-                config = loadConfig("config.json") { Config() }
+                config = loadConfig(configPath) { Config() }
                 call.respond(HttpStatusCode.OK, "Done!")
             }
 

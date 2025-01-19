@@ -24,7 +24,7 @@ val logger = KotlinLogging.logger {}
 
 fun Route.wizard() {
 
-    staticFiles("/cardimages", File("/app/cards/wizard"), index = null) {
+    staticFiles("/cardimages", File(System.getenv("GAMESBACKEND_CARDS_DIR") ?: "cards/wizard"), index = null) {
         cacheControl {
             listOf(CacheControl.MaxAge(365 * 24 * 60 * 60))
         }
@@ -77,6 +77,7 @@ fun Route.wizard() {
             } catch (e: Exception) {
                 logger.error(e.cause) { "Cause of Error in Websocket" }
                 logger.error(e) { "Error in Websocket" }
+                e.printStackTrace()
             }
         }
     }

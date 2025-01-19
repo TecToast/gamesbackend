@@ -69,7 +69,7 @@ fun main() {
 }
 
 private fun initDirectories() {
-    val media = File("/app/media")
+    val media = File(System.getenv("GAMESBACKEND_MEDIA_DIR") ?: "media")
     media.mkdir()
     jeopardyMedia = media.resolve("jeopardy")
     jeopardyMedia.mkdir()

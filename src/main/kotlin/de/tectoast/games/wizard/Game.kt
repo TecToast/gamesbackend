@@ -536,7 +536,7 @@ class Game(val id: Int, val owner: String) {
                 ) && fc.color != card.color && fc.color != Color.MAGICIAN && fc != DRAGON && playerCards.any { it.color == fc.color }
             ) return
         }
-        if (layedCards.values.all { it.color in setOf(Color.FOOL, Color.SPECIAL) }) {
+        if (layedCards.values.all { it != DRAGON && it.color in setOf(Color.FOOL, Color.SPECIAL) }) {
             if (card == DRAGON || card.color != Color.SPECIAL && card.color != Color.FOOL) {
                 firstCard = card
             }
